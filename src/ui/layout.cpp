@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <limits>
 
 #include <guinevere/ui/runtime.hpp>
 
@@ -248,6 +249,165 @@ float resolve_axis_size(float preferred_size, float min_size, float max_size) no
         out = clamped_min_size;
     }
     return std::max(0.0f, out);
+}
+
+std::vector<float> resolve_axis_tracks(
+    float container_size,
+    const std::vector<LayoutConfig::AxisTrackConstraint>& tracks,
+    float padding,
+    float gap
+) noexcept
+{
+    std::vector<float> out;
+    if(tracks.empty()) {
+        return out;
+    }
+
+    out.resize(tracks.size(), 0.0f);
+
+    const float clamped_container_size = std::max(0.0f, container_size);
+    const float clamped_padding = std::max(0.0f, padding);
+    const float clamped_gap = std::max(0.0f, gap);
+    const float total_gap = tracks.size() > 1U
+        ? clamped_gap * static_cast<float>(tracks.size() - 1U)
+        : 0.0f;
+    const float available_size = std::max(
+        0.0f,
+        clamped_container_size - (clamped_padding * 2.0f) - total_gap
+    );
+
+    struct TrackState {
+        float min_size = 0.0f;
+        float max_size = 0.0f;
+        float size = 0.0f;
+        float grow_weight = 0.0f;
+        int shrink_priority = 0;
+    };
+
+    std::vector<TrackState> state;
+    state.reserve(tracks.size());
+
+    float total_size = 0.0f;
+    for(const LayoutConfig::AxisTrackConstraint& track : tracks) {
+        TrackState item{};
+        item.min_size = std::max(0.0f, track.min_size);
+        item.max_size = track.max_size > 0.0f
+            ? std::max(track.max_size, item.min_size)
+            : 0.0f;
+        item.size = resolve_axis_size(track.preferred_size, item.min_size, item.max_size);
+        item.grow_weight = std::max(0.0f, track.grow_weight);
+        item.shrink_priority = track.shrink_priority;
+        total_size += item.size;
+        state.push_back(item);
+    }
+
+    constexpr float epsilon = 0.0001f;
+
+    if(total_size > available_size + epsilon) {
+        float deficit = total_size - available_size;
+
+        std::vector<std::size_t> shrink_order(state.size(), 0U);
+        for(std::size_t i = 0U; i < shrink_order.size(); ++i) {
+            shrink_order[i] = i;
+        }
+
+        std::sort(
+            shrink_order.begin(),
+            shrink_order.end(),
+            [&state](std::size_t lhs_index, std::size_t rhs_index) {
+                const TrackState& lhs = state[lhs_index];
+                const TrackState& rhs = state[rhs_index];
+                if(lhs.shrink_priority != rhs.shrink_priority) {
+                    return lhs.shrink_priority < rhs.shrink_priority;
+                }
+                const float lhs_room = lhs.size - lhs.min_size;
+                const float rhs_room = rhs.size - rhs.min_size;
+                return lhs_room > rhs_room;
+            }
+        );
+
+        for(const std::size_t index : shrink_order) {
+            if(deficit <= epsilon) {
+                break;
+            }
+
+            TrackState& item = state[index];
+            const float shrink_room = std::max(0.0f, item.size - item.min_size);
+            if(shrink_room <= epsilon) {
+                continue;
+            }
+
+            const float shrink_amount = std::min(shrink_room, deficit);
+            item.size -= shrink_amount;
+            deficit -= shrink_amount;
+        }
+
+        if(deficit > epsilon) {
+            float remaining_total = 0.0f;
+            for(const TrackState& item : state) {
+                remaining_total += item.size;
+            }
+
+            if(remaining_total > epsilon && available_size > 0.0f) {
+                const float scale = available_size / remaining_total;
+                for(TrackState& item : state) {
+                    item.size = std::max(0.0f, item.size * scale);
+                }
+            } else {
+                for(TrackState& item : state) {
+                    item.size = 0.0f;
+                }
+            }
+        }
+    } else if(total_size + epsilon < available_size) {
+        float extra = available_size - total_size;
+        while(extra > epsilon) {
+            float total_grow_weight = 0.0f;
+            for(const TrackState& item : state) {
+                if(item.grow_weight <= 0.0f) {
+                    continue;
+                }
+                const bool at_max = item.max_size > 0.0f
+                    && item.size >= (item.max_size - epsilon);
+                if(!at_max) {
+                    total_grow_weight += item.grow_weight;
+                }
+            }
+
+            if(total_grow_weight <= epsilon) {
+                break;
+            }
+
+            float consumed = 0.0f;
+            for(TrackState& item : state) {
+                if(item.grow_weight <= 0.0f) {
+                    continue;
+                }
+
+                const float grow_room = item.max_size > 0.0f
+                    ? std::max(0.0f, item.max_size - item.size)
+                    : std::numeric_limits<float>::max();
+                if(grow_room <= epsilon) {
+                    continue;
+                }
+
+                const float share = extra * (item.grow_weight / total_grow_weight);
+                const float grow_amount = std::min(grow_room, share);
+                item.size += grow_amount;
+                consumed += grow_amount;
+            }
+
+            if(consumed <= epsilon) {
+                break;
+            }
+            extra -= consumed;
+        }
+    }
+
+    for(std::size_t i = 0U; i < state.size(); ++i) {
+        out[i] = std::max(0.0f, state[i].size);
+    }
+    return out;
 }
 
 gfx::Rect inset_rect(gfx::Rect rect, float inset) noexcept

@@ -145,11 +145,14 @@ Guinevere does not bundle the whole font set into your `.exe` by default. Asset 
 - Use `layout_in_viewport(...)` for responsive root bounds instead of hand-written viewport clamp logic.
 - Use `inset_rect(...)`, `split_row_*`, and `split_column_*` helpers to derive child `Rect` regions without manual coordinate math.
 - Use `axis_available_size(...)` + `resolve_axis_size(...)` to derive section heights from preferred/min/max constraints.
+- Set `layout_config.main_axis_tracks` (or `Entry::main_axis_tracks(...)`) when multiple children compete on one axis and you need min/preferred/max with shrink priority and grow weight; `Pipeline::layout(...)` resolves these tracks automatically.
 - If you build scaffold manually via free functions, set `frame_builder.app_breakpoint(...)` (usually from `scaffold.app_layout.breakpoint`) before using `.width({.compact=..., .expanded=...})` / `.height(...)`.
 - Size children with `width_fill(weight)`, `height_fill(weight)`, `width_fixed(...)`, `height_fixed(...)`.
 - Constrain bounds with `min_width(...)`, `max_width(...)`, `min_height(...)`, `max_height(...)`.
 - Control layout flow with `justify_*()` and `align_*()` (or `justify(...)` / `align(...)`).
 - Control overflow with `overflow_clip()`, `overflow_visible()`, `overflow_wrap()`, or `overflow_scroll()`.
+- Treat UI/state keys as key *segments* (for example `panel`, `increase`, `reset`) and avoid dots in local keys; `ComponentScope`/`StateStore::Scope` now validate this.
+- Duplicate node keys in the same frame are rejected with an exception instead of being silently ignored.
 - Persist UI/app state across frames with `StateStore` and `scope(...)`.
 - Reconcile into `UiTree` via `Reconciler::reconcile(...)`.
 - Begin/end input processing via `InteractionState::begin_frame(...)` / `end_frame(...)`.

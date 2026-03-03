@@ -89,6 +89,21 @@ struct NodeSnapshot {
 
 [[nodiscard]] bool layout_config_equal(const LayoutConfig& lhs, const LayoutConfig& rhs) noexcept
 {
+    if(lhs.main_axis_tracks.size() != rhs.main_axis_tracks.size()) {
+        return false;
+    }
+    for(std::size_t i = 0U; i < lhs.main_axis_tracks.size(); ++i) {
+        const auto& lhs_track = lhs.main_axis_tracks[i];
+        const auto& rhs_track = rhs.main_axis_tracks[i];
+        if(lhs_track.min_size != rhs_track.min_size
+            || lhs_track.preferred_size != rhs_track.preferred_size
+            || lhs_track.max_size != rhs_track.max_size
+            || lhs_track.grow_weight != rhs_track.grow_weight
+            || lhs_track.shrink_priority != rhs_track.shrink_priority) {
+            return false;
+        }
+    }
+
     return lhs.direction == rhs.direction
         && lhs.gap == rhs.gap
         && lhs.padding == rhs.padding
@@ -387,16 +402,32 @@ void Reconciler::reconcile(
         if(entry.node.key.empty()) {
             continue;
         }
+        if(entry.node.key == root_string) {
+            throw std::invalid_argument(
+                "Reconciler node key collides with root key: " + entry.node.key
+            );
+        }
+        if(!seen_keys.insert(entry.node.key).second) {
+            throw std::invalid_argument(
+                "Reconciler duplicate node key in frame: " + entry.node.key
+            );
+        }
 
         const std::string resolved_parent_key = entry.parent_key.empty()
             ? root_string
             : entry.parent_key;
 
-        std::size_t parent = root_index;
         const auto parent_it = created.find(resolved_parent_key);
-        if(parent_it != created.end()) {
-            parent = parent_it->second;
+        if(parent_it == created.end()) {
+            throw std::invalid_argument(
+                "Reconciler parent key not found: "
+                + resolved_parent_key
+                + " (child: "
+                + entry.node.key
+                + ")"
+            );
         }
+        const std::size_t parent = parent_it->second;
 
         UiNode node;
         node.key = entry.node.key;
@@ -471,7 +502,6 @@ void Reconciler::reconcile(
             UiNode* stored = tree.get(index);
             if(stored != nullptr) {
                 created[stored->key] = index;
-                seen_keys.insert(stored->key);
 
                 if(has_flag(stored->dirty_flags, DirtyFlags::Layout)) {
                     mark_ancestor_chain_dirty(

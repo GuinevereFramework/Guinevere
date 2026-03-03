@@ -84,14 +84,12 @@ int main()
     guinevere::ui::FrameBuilder builder(frame);
     MockRenderer renderer;
 
-    builder
-        .panel("root", "panel")
-        .layout(guinevere::gfx::Rect{40.0f, 40.0f, 320.0f, 180.0f})
-        .column(10.0f, 10.0f);
+    auto panel_entry = builder.panel("root", "panel");
+    panel_entry.layout(guinevere::gfx::Rect{40.0f, 40.0f, 320.0f, 180.0f});
+    panel_entry.column(10.0f, 10.0f);
     builder.label("panel", "title", "Dirty Repaint Test");
-    builder
-        .image("panel", "preview", "tests/assets/sample.png")
-        .height_fixed(64.0f);
+    auto preview_entry = builder.image("panel", "preview", "tests/assets/sample.png");
+    preview_entry.height_fixed(64.0f);
 
     guinevere::ui::Reconciler::reconcile(tree, "root", frame);
     pipeline.layout(tree, guinevere::gfx::Rect{0.0f, 0.0f, 800.0f, 600.0f});

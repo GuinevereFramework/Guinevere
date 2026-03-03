@@ -91,64 +91,65 @@ int main()
             const guinevere::ui::RectSplit header_lines =
                 guinevere::ui::split_column_start(scaffold.header, 34.0f, 2.0f);
 
-            frame_builder
-                .label("root", "title", "Guinevere Demo Window")
-                .layout(header_lines.start);
-            frame_builder
-                .label("root", "subtitle", subtitle_text)
-                .layout(header_lines.end);
+            auto title_entry = frame_builder.label("root", "title", "Guinevere Demo Window");
+            title_entry.layout(header_lines.start);
+            auto subtitle_entry = frame_builder.label("root", "subtitle", subtitle_text);
+            subtitle_entry.layout(header_lines.end);
             if(show_visual_column && frame_context.assets.has_image("demo_hero")) {
-                frame_builder
-                    .image_asset("root", "hero_image", "demo_hero")
-                    .layout(hero_rect);
+                auto hero_entry = frame_builder.image_asset("root", "hero_image", "demo_hero");
+                hero_entry.layout(hero_rect);
             }
-            frame_builder
-                .panel("root", "controls_panel")
-                .layout(controls_panel_rect)
-                .column(14.0f, 18.0f)
-                .align_stretch()
-                .justify_start();
-            frame_builder
-                .label("controls_panel", "controls_label", "Controls Panel (Auto Layout)");
-            frame_builder
-                .row("controls_panel", "button_row", 20.0f, 0.0f)
-                .height_fixed(64.0f)
-                .overflow_scroll()
-                .align_stretch()
-                .justify_start();
-            frame_builder
-                .button("button_row", "counter_increase", "Click me")
-                .on_click([&ui_state]() {
-                    ui_state.update<int>("click_count", [](int& value) {
-                        ++value;
-                    });
-                })
-                .width(guinevere::ui::ResponsiveProperty{
-                    .compact = 192.0f,
-                    .expanded = 240.0f
-                })
-                .height_fixed(56.0f);
-            frame_builder
-                .button("button_row", "counter_reset", "Reset")
-                .on_click([&ui_state]() {
-                    ui_state.set<int>("click_count", 0);
-                })
-                .width(guinevere::ui::ResponsiveProperty{
-                    .compact = 192.0f,
-                    .expanded = 240.0f
-                })
-                .height_fixed(56.0f);
-            frame_builder
-                .button("button_row", "counter_info", "More")
-                .width(guinevere::ui::ResponsiveProperty{
-                    .compact = 192.0f,
-                    .expanded = 240.0f
-                })
-                .height_fixed(56.0f);
-            frame_builder
-                .label("controls_panel", "counter_text", "Button clicks: " + std::to_string(click_count));
-            frame_builder
-                .label("controls_panel", "counter_hint", "Scroll mouse wheel over button row to pan horizontally");
+            auto controls_panel_entry = frame_builder.panel("root", "controls_panel");
+            controls_panel_entry.layout(controls_panel_rect);
+            controls_panel_entry.column(14.0f, 18.0f);
+            controls_panel_entry.align_stretch();
+            controls_panel_entry.justify_start();
+            frame_builder.label("controls_panel", "controls_label", "Controls Panel (Auto Layout)");
+            auto button_row_entry = frame_builder.row("controls_panel", "button_row", 20.0f, 0.0f);
+            button_row_entry.height_fixed(64.0f);
+            button_row_entry.overflow_scroll();
+            button_row_entry.align_stretch();
+            button_row_entry.justify_start();
+
+            auto increase_button_entry = frame_builder.button("button_row", "counter_increase", "Click me");
+            increase_button_entry.on_click([&ui_state]() {
+                ui_state.update<int>("click_count", [](int& value) {
+                    ++value;
+                });
+            });
+            increase_button_entry.width(guinevere::ui::ResponsiveProperty{
+                .compact = 192.0f,
+                .expanded = 240.0f
+            });
+            increase_button_entry.height_fixed(56.0f);
+
+            auto reset_button_entry = frame_builder.button("button_row", "counter_reset", "Reset");
+            reset_button_entry.on_click([&ui_state]() {
+                ui_state.set<int>("click_count", 0);
+            });
+            reset_button_entry.width(guinevere::ui::ResponsiveProperty{
+                .compact = 192.0f,
+                .expanded = 240.0f
+            });
+            reset_button_entry.height_fixed(56.0f);
+
+            auto info_button_entry = frame_builder.button("button_row", "counter_info", "More");
+            info_button_entry.width(guinevere::ui::ResponsiveProperty{
+                .compact = 192.0f,
+                .expanded = 240.0f
+            });
+            info_button_entry.height_fixed(56.0f);
+
+            frame_builder.label(
+                "controls_panel",
+                "counter_text",
+                "Button clicks: " + std::to_string(click_count)
+            );
+            frame_builder.label(
+                "controls_panel",
+                "counter_hint",
+                "Scroll mouse wheel over button row to pan horizontally"
+            );
 
             frame_context.renderer.clear(guinevere::gfx::Color{0.08f, 0.10f, 0.13f, 1.0f});
 

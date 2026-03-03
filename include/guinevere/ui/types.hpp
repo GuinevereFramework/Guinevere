@@ -113,6 +113,14 @@ constexpr DirtyFlags& operator&=(DirtyFlags& lhs, DirtyFlags rhs) noexcept
 }
 
 struct LayoutConfig {
+    struct AxisTrackConstraint {
+        float min_size = 0.0f;
+        float preferred_size = 0.0f;
+        float max_size = 0.0f;
+        float grow_weight = 0.0f;
+        int shrink_priority = 0;
+    };
+
     LayoutDirection direction = LayoutDirection::None;
     float gap = 6.0f;
     float padding = 8.0f;
@@ -129,6 +137,7 @@ struct LayoutConfig {
     float max_height = 0.0f;
     float fixed_width = 0.0f;
     float fixed_height = 0.0f;
+    std::vector<AxisTrackConstraint> main_axis_tracks{};
 };
 
 enum class AppBreakpoint {
@@ -251,6 +260,13 @@ struct AppScaffoldResult {
     float preferred_size,
     float min_size = 0.0f,
     float max_size = 0.0f
+) noexcept;
+
+[[nodiscard]] std::vector<float> resolve_axis_tracks(
+    float container_size,
+    const std::vector<LayoutConfig::AxisTrackConstraint>& tracks,
+    float padding = 0.0f,
+    float gap = 0.0f
 ) noexcept;
 
 struct RectSplit {

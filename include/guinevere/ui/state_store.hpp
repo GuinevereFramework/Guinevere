@@ -4,6 +4,61 @@
 
 namespace guinevere::ui {
 
+namespace detail {
+
+inline constexpr char k_scope_key_separator = '.';
+
+[[nodiscard]] inline bool is_valid_key_segment(std::string_view key_segment) noexcept
+{
+    return !key_segment.empty()
+        && key_segment.find(k_scope_key_separator) == std::string_view::npos;
+}
+
+[[nodiscard]] inline bool is_valid_qualified_key(std::string_view key) noexcept
+{
+    if(key.empty()) {
+        return false;
+    }
+
+    bool previous_was_separator = true;
+    for(const char c : key) {
+        if(c == k_scope_key_separator) {
+            if(previous_was_separator) {
+                return false;
+            }
+            previous_was_separator = true;
+            continue;
+        }
+        previous_was_separator = false;
+    }
+
+    return !previous_was_separator;
+}
+
+inline void validate_key_segment(std::string_view key_segment, std::string_view context_name)
+{
+    if(key_segment.empty()) {
+        throw std::invalid_argument(std::string(context_name) + " must not be empty.");
+    }
+    if(key_segment.find(k_scope_key_separator) != std::string_view::npos) {
+        throw std::invalid_argument(
+            std::string(context_name) + " must not contain '" + k_scope_key_separator + "'."
+        );
+    }
+}
+
+inline void validate_qualified_key(std::string_view key, std::string_view context_name)
+{
+    if(!is_valid_qualified_key(key)) {
+        throw std::invalid_argument(
+            std::string(context_name)
+            + " must be a non-empty dotted path with non-empty segments."
+        );
+    }
+}
+
+} // namespace detail
+
 class StateStore {
 public:
     enum class ChangeKind {
@@ -84,6 +139,12 @@ public:
             : store_(store)
             , prefix_(std::move(prefix))
         {
+            if(store_ == nullptr) {
+                throw std::invalid_argument("StateStore::Scope store must not be null.");
+            }
+            if(!prefix_.empty()) {
+                detail::validate_qualified_key(prefix_, "StateStore::Scope prefix");
+            }
         }
 
         template<typename T>
@@ -149,6 +210,10 @@ public:
     private:
         [[nodiscard]] std::string compose_key(std::string_view key) const
         {
+            if(!key.empty()) {
+                detail::validate_key_segment(key, "StateStore::Scope key");
+            }
+
             if(prefix_.empty()) {
                 return std::string(key);
             }
@@ -160,7 +225,7 @@ public:
             std::string full_key;
             full_key.reserve(prefix_.size() + key.size() + 1U);
             full_key.append(prefix_);
-            full_key.push_back('.');
+            full_key.push_back(detail::k_scope_key_separator);
             full_key.append(key);
             return full_key;
         }
@@ -249,6 +314,9 @@ public:
 
     [[nodiscard]] Scope scope(std::string prefix)
     {
+        if(!prefix.empty()) {
+            detail::validate_qualified_key(prefix, "StateStore scope prefix");
+        }
         return Scope(this, std::move(prefix));
     }
 
@@ -289,24 +357,24 @@ public:
         , mount_parent_key_(std::move(mount_parent_key))
         , component_key_prefix_(std::move(component_key_prefix))
     {
-        if(mount_parent_key_.empty()) {
-            throw std::invalid_argument("ComponentScope mount_parent_key must not be empty.");
-        }
-        if(component_key_prefix_.empty()) {
-            throw std::invalid_argument("ComponentScope component_key_prefix must not be empty.");
-        }
+        detail::validate_qualified_key(
+            mount_parent_key_,
+            "ComponentScope mount_parent_key"
+        );
+        detail::validate_qualified_key(
+            component_key_prefix_,
+            "ComponentScope component_key_prefix"
+        );
     }
 
     [[nodiscard]] std::string node_key(std::string_view local_key) const
     {
-        if(local_key.empty()) {
-            return component_key_prefix_;
-        }
+        detail::validate_key_segment(local_key, "ComponentScope local_key");
 
         std::string full_key;
         full_key.reserve(component_key_prefix_.size() + local_key.size() + 1U);
         full_key.append(component_key_prefix_);
-        full_key.push_back('.');
+        full_key.push_back(detail::k_scope_key_separator);
         full_key.append(local_key);
         return full_key;
     }
@@ -344,9 +412,10 @@ public:
         std::string local_mount_parent_key = {}
     ) const
     {
-        if(local_component_key.empty()) {
-            throw std::invalid_argument("ComponentScope local_component_key must not be empty.");
-        }
+        detail::validate_key_segment(
+            local_component_key,
+            "ComponentScope local_component_key"
+        );
 
         const std::string resolved_parent = local_mount_parent_key.empty()
             ? mount_parent_key_

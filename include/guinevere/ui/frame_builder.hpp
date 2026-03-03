@@ -1,5 +1,8 @@
 #pragma once
 
+#include <cassert>
+#include <unordered_set>
+
 #include <guinevere/ui/types.hpp>
 
 namespace guinevere::ui {
@@ -8,322 +11,312 @@ class FrameBuilder {
 public:
     class Entry {
     public:
-        explicit Entry(ReconciledNode* node, const AppBreakpoint* app_breakpoint) noexcept
-            : node_(node)
+        explicit Entry(
+            std::vector<ReconciledNode>* nodes,
+            std::size_t node_index,
+            const AppBreakpoint* app_breakpoint
+        ) noexcept
+            : nodes_(nodes)
+            , node_index_(node_index)
             , app_breakpoint_(app_breakpoint)
         {
         }
 
-        Entry& text(std::string value)
+        void text(std::string value)
         {
-            node_->node.text = std::move(value);
-            return *this;
+            node().node.text = std::move(value);
         }
 
-        Entry& image_source(std::string value)
+        void image_source(std::string value)
         {
-            node_->node.image_source = std::move(value);
-            return *this;
+            node().node.image_source = std::move(value);
         }
 
-        Entry& image_asset(std::string asset_id)
+        void image_asset(std::string asset_id)
         {
             constexpr std::string_view prefix = "asset://image/";
-            node_->node.image_source.clear();
-            node_->node.image_source.reserve(prefix.size() + asset_id.size());
-            node_->node.image_source.append(prefix);
-            node_->node.image_source.append(asset_id);
-            return *this;
+            node().node.image_source.clear();
+            node().node.image_source.reserve(prefix.size() + asset_id.size());
+            node().node.image_source.append(prefix);
+            node().node.image_source.append(asset_id);
         }
 
-        Entry& image_tint(gfx::Color value)
+        void image_tint(gfx::Color value)
         {
-            node_->node.image_tint = value;
-            return *this;
+            node().node.image_tint = value;
         }
 
-        Entry& classes(std::vector<std::string> values)
+        void classes(std::vector<std::string> values)
         {
-            node_->node.classes = std::move(values);
-            return *this;
+            node().node.classes = std::move(values);
         }
 
         template<typename OnClick>
-        Entry& on_click(OnClick&& on_click)
+        void on_click(OnClick&& on_click)
         {
-            node_->node.on_click = std::forward<OnClick>(on_click);
-            return *this;
+            node().node.on_click = std::forward<OnClick>(on_click);
         }
 
         template<typename OnChange>
-        Entry& on_text_change(OnChange&& on_change)
+        void on_text_change(OnChange&& on_change)
         {
-            node_->node.on_text_change = std::forward<OnChange>(on_change);
-            return *this;
+            node().node.on_text_change = std::forward<OnChange>(on_change);
         }
 
         template<typename OnSubmit>
-        Entry& on_text_submit(OnSubmit&& on_submit)
+        void on_text_submit(OnSubmit&& on_submit)
         {
-            node_->node.on_text_submit = std::forward<OnSubmit>(on_submit);
-            return *this;
+            node().node.on_text_submit = std::forward<OnSubmit>(on_submit);
         }
 
-        Entry& allow_caret_toggle(bool value = true)
+        void allow_caret_toggle(bool value = true)
         {
-            node_->node.allow_user_toggle_caret = value;
-            return *this;
+            node().node.allow_user_toggle_caret = value;
         }
 
-        Entry& allow_arrow_left(bool value = true)
+        void allow_arrow_left(bool value = true)
         {
-            node_->node.allow_arrow_left = value;
-            return *this;
+            node().node.allow_arrow_left = value;
         }
 
-        Entry& allow_arrow_right(bool value = true)
+        void allow_arrow_right(bool value = true)
         {
-            node_->node.allow_arrow_right = value;
-            return *this;
+            node().node.allow_arrow_right = value;
         }
 
-        Entry& allow_arrow_up(bool value = true)
+        void allow_arrow_up(bool value = true)
         {
-            node_->node.allow_arrow_up = value;
-            return *this;
+            node().node.allow_arrow_up = value;
         }
 
-        Entry& allow_arrow_down(bool value = true)
+        void allow_arrow_down(bool value = true)
         {
-            node_->node.allow_arrow_down = value;
-            return *this;
+            node().node.allow_arrow_down = value;
         }
 
-        Entry& allow_arrow_keys(bool value = true)
+        void allow_arrow_keys(bool value = true)
         {
-            node_->node.allow_arrow_left = value;
-            node_->node.allow_arrow_right = value;
-            node_->node.allow_arrow_up = value;
-            node_->node.allow_arrow_down = value;
-            return *this;
+            node().node.allow_arrow_left = value;
+            node().node.allow_arrow_right = value;
+            node().node.allow_arrow_up = value;
+            node().node.allow_arrow_down = value;
         }
 
-        Entry& allow_mouse_set_cursor(bool value = true)
+        void allow_mouse_set_cursor(bool value = true)
         {
-            node_->node.allow_mouse_set_cursor = value;
-            return *this;
+            node().node.allow_mouse_set_cursor = value;
         }
 
-        Entry& layout(gfx::Rect rect)
+        void layout(gfx::Rect rect)
         {
-            node_->node.layout_hint = rect;
-            return *this;
+            node().node.layout_hint = rect;
         }
 
-        Entry& column(float gap = 6.0f, float padding = 8.0f)
+        void column(float gap = 6.0f, float padding = 8.0f)
         {
-            node_->node.layout_config.direction = LayoutDirection::Column;
-            node_->node.layout_config.gap = gap;
-            node_->node.layout_config.padding = padding;
-            return *this;
+            node().node.layout_config.direction = LayoutDirection::Column;
+            node().node.layout_config.gap = gap;
+            node().node.layout_config.padding = padding;
         }
 
-        Entry& row(float gap = 6.0f, float padding = 8.0f)
+        void row(float gap = 6.0f, float padding = 8.0f)
         {
-            node_->node.layout_config.direction = LayoutDirection::Row;
-            node_->node.layout_config.gap = gap;
-            node_->node.layout_config.padding = padding;
-            return *this;
+            node().node.layout_config.direction = LayoutDirection::Row;
+            node().node.layout_config.gap = gap;
+            node().node.layout_config.padding = padding;
         }
 
-        Entry& align(AlignItems value)
+        void align(AlignItems value)
         {
-            node_->node.layout_config.align_items = value;
-            return *this;
+            node().node.layout_config.align_items = value;
         }
 
-        Entry& justify(JustifyContent value)
+        void justify(JustifyContent value)
         {
-            node_->node.layout_config.justify_content = value;
-            return *this;
+            node().node.layout_config.justify_content = value;
         }
 
-        Entry& overflow(OverflowPolicy value)
+        void overflow(OverflowPolicy value)
         {
-            node_->node.layout_config.overflow = value;
-            return *this;
+            node().node.layout_config.overflow = value;
         }
 
-        Entry& overflow_clip()
+        void main_axis_tracks(std::vector<LayoutConfig::AxisTrackConstraint> tracks)
         {
-            return overflow(OverflowPolicy::Clip);
+            node().node.layout_config.main_axis_tracks = std::move(tracks);
         }
 
-        Entry& overflow_visible()
+        void clear_main_axis_tracks()
         {
-            return overflow(OverflowPolicy::Visible);
+            node().node.layout_config.main_axis_tracks.clear();
         }
 
-        Entry& overflow_wrap()
+        void overflow_clip()
         {
-            return overflow(OverflowPolicy::Wrap);
+            overflow(OverflowPolicy::Clip);
         }
 
-        Entry& overflow_scroll()
+        void overflow_visible()
         {
-            return overflow(OverflowPolicy::Scroll);
+            overflow(OverflowPolicy::Visible);
         }
 
-        Entry& align_start()
+        void overflow_wrap()
         {
-            return align(AlignItems::Start);
+            overflow(OverflowPolicy::Wrap);
         }
 
-        Entry& align_center()
+        void overflow_scroll()
         {
-            return align(AlignItems::Center);
+            overflow(OverflowPolicy::Scroll);
         }
 
-        Entry& align_end()
+        void align_start()
         {
-            return align(AlignItems::End);
+            align(AlignItems::Start);
         }
 
-        Entry& align_stretch()
+        void align_center()
         {
-            return align(AlignItems::Stretch);
+            align(AlignItems::Center);
         }
 
-        Entry& justify_start()
+        void align_end()
         {
-            return justify(JustifyContent::Start);
+            align(AlignItems::End);
         }
 
-        Entry& justify_center()
+        void align_stretch()
         {
-            return justify(JustifyContent::Center);
+            align(AlignItems::Stretch);
         }
 
-        Entry& justify_end()
+        void justify_start()
         {
-            return justify(JustifyContent::End);
+            justify(JustifyContent::Start);
         }
 
-        Entry& justify_space_between()
+        void justify_center()
         {
-            return justify(JustifyContent::SpaceBetween);
+            justify(JustifyContent::Center);
         }
 
-        Entry& width_fill(float weight = 1.0f)
+        void justify_end()
         {
-            node_->node.layout_config.width_mode = SizeMode::Fill;
-            node_->node.layout_config.width_fill_weight = weight;
-            return *this;
+            justify(JustifyContent::End);
         }
 
-        Entry& height_fill(float weight = 1.0f)
+        void justify_space_between()
         {
-            node_->node.layout_config.height_mode = SizeMode::Fill;
-            node_->node.layout_config.height_fill_weight = weight;
-            return *this;
+            justify(JustifyContent::SpaceBetween);
         }
 
-        Entry& width_fixed(float width)
+        void width_fill(float weight = 1.0f)
         {
-            node_->node.layout_config.width_mode = SizeMode::Fixed;
-            node_->node.layout_config.fixed_width = width;
-            return *this;
+            node().node.layout_config.width_mode = SizeMode::Fill;
+            node().node.layout_config.width_fill_weight = weight;
         }
 
-        Entry& width(float width)
+        void height_fill(float weight = 1.0f)
         {
-            return width_fixed(width);
+            node().node.layout_config.height_mode = SizeMode::Fill;
+            node().node.layout_config.height_fill_weight = weight;
         }
 
-        Entry& width(const ResponsiveProperty& value)
+        void width_fixed(float width)
+        {
+            node().node.layout_config.width_mode = SizeMode::Fixed;
+            node().node.layout_config.fixed_width = width;
+        }
+
+        void width(float width)
+        {
+            width_fixed(width);
+        }
+
+        void width(const ResponsiveProperty& value)
         {
             const AppBreakpoint breakpoint = app_breakpoint_ != nullptr
                 ? *app_breakpoint_
                 : AppBreakpoint::Compact;
-            return width_fixed(resolve_responsive_property(breakpoint, value));
+            width_fixed(resolve_responsive_property(breakpoint, value));
         }
 
-        Entry& height_fixed(float height)
+        void height_fixed(float height)
         {
-            node_->node.layout_config.height_mode = SizeMode::Fixed;
-            node_->node.layout_config.fixed_height = height;
-            return *this;
+            node().node.layout_config.height_mode = SizeMode::Fixed;
+            node().node.layout_config.fixed_height = height;
         }
 
-        Entry& height(float height)
+        void height(float height)
         {
-            return height_fixed(height);
+            height_fixed(height);
         }
 
-        Entry& height(const ResponsiveProperty& value)
+        void height(const ResponsiveProperty& value)
         {
             const AppBreakpoint breakpoint = app_breakpoint_ != nullptr
                 ? *app_breakpoint_
                 : AppBreakpoint::Compact;
-            return height_fixed(resolve_responsive_property(breakpoint, value));
+            height_fixed(resolve_responsive_property(breakpoint, value));
         }
 
-        Entry& size_fixed(float width, float height)
+        void size_fixed(float width, float height)
         {
-            node_->node.layout_config.width_mode = SizeMode::Fixed;
-            node_->node.layout_config.height_mode = SizeMode::Fixed;
-            node_->node.layout_config.fixed_width = width;
-            node_->node.layout_config.fixed_height = height;
-            return *this;
+            node().node.layout_config.width_mode = SizeMode::Fixed;
+            node().node.layout_config.height_mode = SizeMode::Fixed;
+            node().node.layout_config.fixed_width = width;
+            node().node.layout_config.fixed_height = height;
         }
 
-        Entry& size_auto()
+        void size_auto()
         {
-            node_->node.layout_config.width_mode = SizeMode::Auto;
-            node_->node.layout_config.height_mode = SizeMode::Auto;
-            return *this;
+            node().node.layout_config.width_mode = SizeMode::Auto;
+            node().node.layout_config.height_mode = SizeMode::Auto;
         }
 
-        Entry& min_width(float value)
+        void min_width(float value)
         {
-            node_->node.layout_config.min_width = value;
-            return *this;
+            node().node.layout_config.min_width = value;
         }
 
-        Entry& max_width(float value)
+        void max_width(float value)
         {
-            node_->node.layout_config.max_width = value;
-            return *this;
+            node().node.layout_config.max_width = value;
         }
 
-        Entry& min_height(float value)
+        void min_height(float value)
         {
-            node_->node.layout_config.min_height = value;
-            return *this;
+            node().node.layout_config.min_height = value;
         }
 
-        Entry& max_height(float value)
+        void max_height(float value)
         {
-            node_->node.layout_config.max_height = value;
-            return *this;
+            node().node.layout_config.max_height = value;
         }
 
-        Entry& width_range(float min_value, float max_value)
+        void width_range(float min_value, float max_value)
         {
-            node_->node.layout_config.min_width = min_value;
-            node_->node.layout_config.max_width = max_value;
-            return *this;
+            node().node.layout_config.min_width = min_value;
+            node().node.layout_config.max_width = max_value;
         }
 
-        Entry& height_range(float min_value, float max_value)
+        void height_range(float min_value, float max_value)
         {
-            node_->node.layout_config.min_height = min_value;
-            node_->node.layout_config.max_height = max_value;
-            return *this;
+            node().node.layout_config.min_height = min_value;
+            node().node.layout_config.max_height = max_value;
         }
 
     private:
-        ReconciledNode* node_ = nullptr;
+        [[nodiscard]] ReconciledNode& node() noexcept
+        {
+            assert(nodes_ != nullptr);
+            assert(node_index_ < nodes_->size());
+            return (*nodes_)[node_index_];
+        }
+
+        std::vector<ReconciledNode>* nodes_ = nullptr;
+        std::size_t node_index_ = 0U;
         const AppBreakpoint* app_breakpoint_ = nullptr;
     };
 
@@ -335,6 +328,7 @@ public:
     void clear() noexcept
     {
         nodes_.clear();
+        keys_in_frame_.clear();
     }
 
     FrameBuilder& app_breakpoint(AppBreakpoint breakpoint) noexcept
@@ -351,16 +345,24 @@ public:
     void reserve(std::size_t count)
     {
         nodes_.reserve(count);
+        keys_in_frame_.reserve(count);
     }
 
     Entry add(std::string parent_key, std::string key, NodeKind kind)
     {
+        if(key.empty()) {
+            throw std::invalid_argument("FrameBuilder key must not be empty.");
+        }
+        if(!keys_in_frame_.insert(key).second) {
+            throw std::invalid_argument("FrameBuilder duplicate key: " + key);
+        }
+
         ReconciledNode node;
         node.parent_key = std::move(parent_key);
         node.node.key = std::move(key);
         node.node.kind = kind;
         nodes_.push_back(std::move(node));
-        return Entry(&nodes_.back(), &app_breakpoint_);
+        return Entry(&nodes_, nodes_.size() - 1U, &app_breakpoint_);
     }
 
     Entry panel(std::string parent_key, std::string key)
@@ -375,39 +377,51 @@ public:
 
     Entry column(std::string parent_key, std::string key, float gap = 6.0f, float padding = 8.0f)
     {
-        return view(std::move(parent_key), std::move(key)).column(gap, padding);
+        Entry entry = view(std::move(parent_key), std::move(key));
+        entry.column(gap, padding);
+        return entry;
     }
 
     Entry row(std::string parent_key, std::string key, float gap = 6.0f, float padding = 8.0f)
     {
-        return view(std::move(parent_key), std::move(key)).row(gap, padding);
+        Entry entry = view(std::move(parent_key), std::move(key));
+        entry.row(gap, padding);
+        return entry;
     }
 
     Entry label(std::string parent_key, std::string key, std::string text)
     {
-        return add(std::move(parent_key), std::move(key), NodeKind::Label).text(std::move(text));
+        Entry entry = add(std::move(parent_key), std::move(key), NodeKind::Label);
+        entry.text(std::move(text));
+        return entry;
     }
 
     Entry image(std::string parent_key, std::string key, std::string image_source)
     {
-        return add(std::move(parent_key), std::move(key), NodeKind::Image)
-            .image_source(std::move(image_source));
+        Entry entry = add(std::move(parent_key), std::move(key), NodeKind::Image);
+        entry.image_source(std::move(image_source));
+        return entry;
     }
 
     Entry image_asset(std::string parent_key, std::string key, std::string image_asset_id)
     {
-        return add(std::move(parent_key), std::move(key), NodeKind::Image)
-            .image_asset(std::move(image_asset_id));
+        Entry entry = add(std::move(parent_key), std::move(key), NodeKind::Image);
+        entry.image_asset(std::move(image_asset_id));
+        return entry;
     }
 
     Entry button(std::string parent_key, std::string key, std::string text)
     {
-        return add(std::move(parent_key), std::move(key), NodeKind::Button).text(std::move(text));
+        Entry entry = add(std::move(parent_key), std::move(key), NodeKind::Button);
+        entry.text(std::move(text));
+        return entry;
     }
 
     Entry text_edit(std::string parent_key, std::string key, std::string value_utf8)
     {
-        return add(std::move(parent_key), std::move(key), NodeKind::TextEdit).text(std::move(value_utf8));
+        Entry entry = add(std::move(parent_key), std::move(key), NodeKind::TextEdit);
+        entry.text(std::move(value_utf8));
+        return entry;
     }
 
     Entry custom(std::string parent_key, std::string key)
@@ -417,6 +431,7 @@ public:
 
 private:
     std::vector<ReconciledNode>& nodes_;
+    std::unordered_set<std::string> keys_in_frame_{};
     AppBreakpoint app_breakpoint_ = AppBreakpoint::Compact;
 };
 
