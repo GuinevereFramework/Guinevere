@@ -17,16 +17,21 @@ public:
     {
         auto local_state = component.state();
         const int click_count = local_state.use<int>("click_count", 0);
+        const std::string panel_key = component.auto_local_key("panel");
+        const std::string title_key = component.auto_local_key("title");
+        const std::string increase_key = component.auto_local_key("increase");
+        const std::string reset_key = component.auto_local_key("reset");
+        const std::string value_key = component.auto_local_key("value");
 
-        auto panel_entry = component.panel("panel");
+        auto panel_entry = component.panel(panel_key);
         panel_entry.column(10.0f, 14.0f);
         panel_entry.align_center();
         panel_entry.justify_start();
         panel_entry.width_fill();
         panel_entry.height_fill();
         panel_entry.min_width(220.0f);
-        component.label("panel", "title", title_);
-        auto increase_button_entry = component.button("panel", "increase", "Increase");
+        component.label(panel_key, title_key, title_);
+        auto increase_button_entry = component.button(panel_key, increase_key, "Increase");
         increase_button_entry.on_click([local_state]() mutable {
             local_state.update<int>("click_count", [](int& value) {
                 ++value;
@@ -38,7 +43,7 @@ public:
         });
         increase_button_entry.height_fixed(56.0f);
 
-        auto reset_button_entry = component.button("panel", "reset", "Reset");
+        auto reset_button_entry = component.button(panel_key, reset_key, "Reset");
         reset_button_entry.on_click([local_state]() mutable {
             local_state.set<int>("click_count", 0);
         });
@@ -47,7 +52,7 @@ public:
             .expanded = 210.0f
         });
         reset_button_entry.height_fixed(56.0f);
-        component.label("panel", "value", "Count: " + std::to_string(click_count));
+        component.label(panel_key, value_key, "Count: " + std::to_string(click_count));
     }
 
 private:
@@ -67,19 +72,24 @@ public:
             "submitted_utf8",
             std::string{}
         );
+        const std::string panel_key = component.auto_local_key("panel");
+        const std::string title_key = component.auto_local_key("title");
+        const std::string editor_key = component.auto_local_key("editor");
+        const std::string submitted_key = component.auto_local_key("submitted");
+        const std::string hint_key = component.auto_local_key("hint");
         const std::string submitted_label = submitted_utf8.empty()
             ? std::string("Press Enter in TextEdit to submit")
             : std::string("Last submitted: ") + submitted_utf8;
 
-        auto panel_entry = component.panel("panel");
+        auto panel_entry = component.panel(panel_key);
         panel_entry.column(12.0f, 14.0f);
         panel_entry.align_stretch();
         panel_entry.justify_start();
         panel_entry.width_fill();
         panel_entry.height_fill();
         panel_entry.min_height(172.0f);
-        component.label("panel", "title", "Text Input Component");
-        auto text_edit_entry = component.text_edit("panel", "editor", text_value_utf8);
+        component.label(panel_key, title_key, "Text Input Component");
+        auto text_edit_entry = component.text_edit(panel_key, editor_key, text_value_utf8);
         text_edit_entry.allow_caret_toggle();
         text_edit_entry.height_fixed(56.0f);
         text_edit_entry.width_fill();
@@ -89,10 +99,10 @@ public:
         text_edit_entry.on_text_submit([local_state](const std::string& submitted_value_utf8) mutable {
             local_state.set<std::string>("submitted_utf8", submitted_value_utf8);
         });
-        component.label("panel", "submitted", submitted_label);
+        component.label(panel_key, submitted_key, submitted_label);
         component.label(
-            "panel",
-            "hint",
+            panel_key,
+            hint_key,
             "Insert: toggle caret | Left/Right: move | Up/Down: start/end"
         );
     }
@@ -102,16 +112,19 @@ void render_hint_component(guinevere::ui::ComponentScope& component)
 {
     auto local_state = component.state();
     const bool expanded = local_state.use<bool>("expanded", false);
+    const std::string panel_key = component.auto_local_key("panel");
+    const std::string toggle_key = component.auto_local_key("toggle");
+    const std::string content_key = component.auto_local_key("content");
 
-    auto panel_entry = component.panel("panel");
+    auto panel_entry = component.panel(panel_key);
     panel_entry.column(10.0f, 12.0f);
     panel_entry.align_stretch();
     panel_entry.justify_start();
     panel_entry.width_fill();
 
     auto toggle_button_entry = component.button(
-        "panel",
-        "toggle",
+        panel_key,
+        toggle_key,
         expanded ? "Hide component tips" : "Show component tips"
     );
     toggle_button_entry.on_click([local_state]() mutable {
@@ -125,8 +138,8 @@ void render_hint_component(guinevere::ui::ComponentScope& component)
         .expanded = 280.0f
     });
     component.label(
-        "panel",
-        "content",
+        panel_key,
+        content_key,
         expanded
             ? std::string(
                   "Function component keeps local state with its own namespace."
@@ -201,42 +214,49 @@ int main()
             guinevere::ui::ComponentScope app_component =
                 runtime.root_component("demo_drm");
 
-            auto title_entry = app_component.label("title", "Guinevere DRM Component Demo");
+            const std::string title_key = app_component.auto_local_key("title");
+            const std::string layout_root_key = app_component.auto_local_key("layout_root");
+            const std::string counter_row_key = app_component.auto_local_key("counter_row");
+            const std::string detail_column_key = app_component.auto_local_key("detail_column");
+            const std::string footer_key = app_component.auto_local_key("footer");
+
+            auto title_entry = app_component.label(title_key, "Guinevere DRM Component Demo");
             title_entry.layout(title_rect);
 
-            auto layout_root_entry = app_component.panel("layout_root");
+            auto layout_root_entry = app_component.panel(layout_root_key);
             layout_root_entry.layout(layout_bounds);
             layout_root_entry.column(row_gap, 18.0f);
             layout_root_entry.main_axis_tracks(layout_tracks);
             layout_root_entry.align_stretch();
             layout_root_entry.justify_start();
 
-            auto counter_row_entry = app_component.row("layout_root", "counter_row", row_gap, 0.0f);
+            auto counter_row_entry = app_component.row(
+                layout_root_key,
+                counter_row_key,
+                row_gap,
+                0.0f
+            );
             counter_row_entry.align_stretch();
             counter_row_entry.justify_start();
 
-            auto detail_column_entry = app_component.column("layout_root", "detail_column", 12.0f, 0.0f);
+            auto detail_column_entry = app_component.column(
+                layout_root_key,
+                detail_column_key,
+                12.0f,
+                0.0f
+            );
             detail_column_entry.height_fill();
             detail_column_entry.align_stretch();
             detail_column_entry.justify_start();
 
-            guinevere::ui::ComponentScope left_counter_component =
-                app_component.mount("counter_left", "counter_row");
-            guinevere::ui::ComponentScope right_counter_component =
-                app_component.mount("counter_right", "counter_row");
-            guinevere::ui::ComponentScope text_editor_component =
-                app_component.mount("text_editor", "detail_column");
-            guinevere::ui::ComponentScope hint_component =
-                app_component.mount("hint", "detail_column");
-
-            left_counter.render(left_counter_component);
-            right_counter.render(right_counter_component);
-            text_editor.render(text_editor_component);
-            render_hint_component(hint_component);
+            app_component.mount_component_auto(counter_row_key, left_counter, "counter");
+            app_component.mount_component_auto(counter_row_key, right_counter, "counter");
+            app_component.mount_component_auto(detail_column_key, text_editor, "editor");
+            app_component.mount_invoke_auto(detail_column_key, render_hint_component, "hint");
 
             auto footer_entry = app_component.label(
-                "layout_root",
-                "footer",
+                layout_root_key,
+                footer_key,
                 footer_text
             );
             footer_entry.align_center();

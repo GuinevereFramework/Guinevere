@@ -1,4 +1,5 @@
 #include <cmath>
+#include <source_location>
 #include <stdexcept>
 
 #include <guinevere/ui/runtime.hpp>
@@ -367,6 +368,157 @@ int main()
             invalid_component_key_rejected = true;
         }
         if(!invalid_component_key_rejected) {
+            return 1;
+        }
+    }
+
+    {
+        guinevere::ui::StateStore scoped_state_store;
+        std::vector<ReconciledNode> component_frame;
+        FrameBuilder component_builder(component_frame);
+        guinevere::ui::ComponentScope component_scope(
+            component_builder,
+            scoped_state_store,
+            "root",
+            "demo_component"
+        );
+        (void)component_scope.panel("layout_root");
+
+        struct CounterComponent {
+            void render(guinevere::ui::ComponentScope& component) const
+            {
+                (void)component.label("title", "Counter");
+            }
+        };
+
+        component_scope.mount_component("counter", "layout_root", CounterComponent{});
+        component_scope.mount_invoke(
+            "hint",
+            "layout_root",
+            [](guinevere::ui::ComponentScope& component) {
+                (void)component.label("text", "Hint");
+            }
+        );
+
+        guinevere::ui::UiTree tree;
+        guinevere::ui::Reconciler::reconcile(tree, "root", component_frame);
+        if(tree.find("demo_component.counter.title") == guinevere::ui::UiTree::npos) {
+            return 1;
+        }
+        if(tree.find("demo_component.hint.text") == guinevere::ui::UiTree::npos) {
+            return 1;
+        }
+    }
+
+    {
+        guinevere::ui::StateStore scoped_state_store;
+        std::vector<ReconciledNode> component_frame;
+        FrameBuilder component_builder(component_frame);
+        guinevere::ui::ComponentScope component_scope(
+            component_builder,
+            scoped_state_store,
+            "root",
+            "auto_component"
+        );
+
+        const auto stable_location = std::source_location::current();
+        const std::string stable_key_a = component_scope.auto_local_key(
+            "panel",
+            0U,
+            stable_location
+        );
+        const std::string stable_key_b = component_scope.auto_local_key(
+            "panel",
+            0U,
+            stable_location
+        );
+        const std::string different_salt_key = component_scope.auto_local_key(
+            "panel",
+            1U,
+            stable_location
+        );
+        if(stable_key_a != stable_key_b || stable_key_a == different_salt_key) {
+            return 1;
+        }
+
+        const std::string layout_root_key = component_scope.auto_local_key("layout_root");
+        (void)component_scope.panel(layout_root_key);
+
+        const auto counter_component_location = std::source_location::current();
+        const std::string counter_component_key = component_scope.auto_local_key(
+            "counter_component",
+            0U,
+            counter_component_location
+        );
+        const auto counter_title_location = std::source_location::current();
+        const std::string counter_title_key = component_scope.auto_local_key(
+            "title",
+            0U,
+            counter_title_location
+        );
+
+        struct AutoCounterComponent {
+            std::source_location title_location{};
+
+            void render(guinevere::ui::ComponentScope& component) const
+            {
+                const std::string title_key = component.auto_local_key(
+                    "title",
+                    0U,
+                    title_location
+                );
+                (void)component.label(title_key, "Counter");
+            }
+        };
+
+        component_scope.mount_component_auto(
+            layout_root_key,
+            AutoCounterComponent{counter_title_location},
+            "counter_component",
+            0U,
+            counter_component_location
+        );
+
+        const auto hint_component_location = std::source_location::current();
+        const std::string hint_component_key = component_scope.auto_local_key(
+            "hint_component",
+            0U,
+            hint_component_location
+        );
+        const auto hint_text_location = std::source_location::current();
+        const std::string hint_text_key = component_scope.auto_local_key(
+            "text",
+            0U,
+            hint_text_location
+        );
+
+        component_scope.mount_invoke_auto(
+            layout_root_key,
+            [hint_text_location](guinevere::ui::ComponentScope& component) {
+                const std::string text_key = component.auto_local_key(
+                    "text",
+                    0U,
+                    hint_text_location
+                );
+                (void)component.label(text_key, "Hint");
+            },
+            "hint_component",
+            0U,
+            hint_component_location
+        );
+
+        guinevere::ui::UiTree tree;
+        guinevere::ui::Reconciler::reconcile(tree, "root", component_frame);
+        if(tree.find(
+               "auto_component." + counter_component_key + "." + counter_title_key
+           )
+            == guinevere::ui::UiTree::npos) {
+            return 1;
+        }
+        if(tree.find(
+               "auto_component." + hint_component_key + "." + hint_text_key
+           )
+            == guinevere::ui::UiTree::npos) {
             return 1;
         }
     }

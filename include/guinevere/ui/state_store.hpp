@@ -1,5 +1,9 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <source_location>
+
 #include <guinevere/ui/frame_builder.hpp>
 
 namespace guinevere::ui {
@@ -55,6 +59,66 @@ inline void validate_qualified_key(std::string_view key, std::string_view contex
             + " must be a non-empty dotted path with non-empty segments."
         );
     }
+}
+
+[[nodiscard]] inline std::uint64_t hash_append_u64(
+    std::uint64_t seed,
+    std::uint64_t value
+) noexcept
+{
+    constexpr std::uint64_t prime = 1099511628211ull;
+    std::uint64_t hash = seed;
+    std::uint64_t input = value;
+    for(std::size_t i = 0U; i < sizeof(std::uint64_t); ++i) {
+        const std::uint8_t byte = static_cast<std::uint8_t>(input & 0xFFull);
+        hash ^= static_cast<std::uint64_t>(byte);
+        hash *= prime;
+        input >>= 8U;
+    }
+    return hash;
+}
+
+[[nodiscard]] inline std::uint64_t fnv1a_hash_text(
+    std::uint64_t seed,
+    std::string_view text
+) noexcept
+{
+    constexpr std::uint64_t prime = 1099511628211ull;
+    std::uint64_t hash = seed;
+    for(const char c : text) {
+        hash ^= static_cast<std::uint64_t>(static_cast<unsigned char>(c));
+        hash *= prime;
+    }
+    return hash;
+}
+
+[[nodiscard]] inline std::string make_auto_key_segment(
+    std::string_view prefix,
+    std::size_t salt,
+    const std::source_location& location
+)
+{
+    validate_key_segment(prefix, "ComponentScope auto key prefix");
+
+    std::uint64_t hash = 1469598103934665603ull;
+    hash = fnv1a_hash_text(hash, location.file_name());
+    hash = fnv1a_hash_text(hash, location.function_name());
+    hash = hash_append_u64(hash, static_cast<std::uint64_t>(location.line()));
+    hash = hash_append_u64(hash, static_cast<std::uint64_t>(location.column()));
+    hash = hash_append_u64(hash, static_cast<std::uint64_t>(salt));
+
+    constexpr char hex_digits[] = "0123456789abcdef";
+    std::string key_segment;
+    key_segment.reserve(prefix.size() + 1U + 16U);
+    key_segment.append(prefix);
+    key_segment.push_back('_');
+
+    for(int shift = 60; shift >= 0; shift -= 4) {
+        const std::uint64_t nibble = (hash >> static_cast<std::uint64_t>(shift)) & 0xFull;
+        key_segment.push_back(hex_digits[static_cast<std::size_t>(nibble)]);
+    }
+
+    return key_segment;
 }
 
 } // namespace detail
@@ -387,6 +451,15 @@ public:
         return node_key(local_parent_key);
     }
 
+    [[nodiscard]] std::string auto_local_key(
+        std::string_view key_prefix = "node",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    ) const
+    {
+        return detail::make_auto_key_segment(key_prefix, salt, location);
+    }
+
     [[nodiscard]] std::string_view mount_parent_key() const noexcept
     {
         return mount_parent_key_;
@@ -425,6 +498,139 @@ public:
             *state_store_,
             resolved_parent,
             node_key(local_component_key)
+        );
+    }
+
+    [[nodiscard]] ComponentScope mount_auto(
+        std::string_view key_prefix = "component",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    ) const
+    {
+        return mount(auto_local_key(key_prefix, salt, location));
+    }
+
+    [[nodiscard]] ComponentScope mount_auto(
+        std::string local_mount_parent_key,
+        std::string_view key_prefix,
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    ) const
+    {
+        return mount(
+            auto_local_key(key_prefix, salt, location),
+            std::move(local_mount_parent_key)
+        );
+    }
+
+    template<typename Component>
+    void mount_component(
+        std::string local_component_key,
+        std::string local_mount_parent_key,
+        Component&& component
+    ) const
+    {
+        ComponentScope child_scope = mount(
+            std::move(local_component_key),
+            std::move(local_mount_parent_key)
+        );
+        std::forward<Component>(component).render(child_scope);
+    }
+
+    template<typename Component>
+    void mount_component(
+        std::string local_component_key,
+        Component&& component
+    ) const
+    {
+        mount_component(
+            std::move(local_component_key),
+            {},
+            std::forward<Component>(component)
+        );
+    }
+
+    template<typename Component>
+    void mount_component_auto(
+        Component&& component,
+        std::string_view key_prefix = "component",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    ) const
+    {
+        mount_component(
+            auto_local_key(key_prefix, salt, location),
+            std::forward<Component>(component)
+        );
+    }
+
+    template<typename Component>
+    void mount_component_auto(
+        std::string local_mount_parent_key,
+        Component&& component,
+        std::string_view key_prefix = "component",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    ) const
+    {
+        mount_component(
+            auto_local_key(key_prefix, salt, location),
+            std::move(local_mount_parent_key),
+            std::forward<Component>(component)
+        );
+    }
+
+    template<typename RenderFn>
+    void mount_invoke(
+        std::string local_component_key,
+        std::string local_mount_parent_key,
+        RenderFn&& render_fn
+    ) const
+    {
+        ComponentScope child_scope = mount(
+            std::move(local_component_key),
+            std::move(local_mount_parent_key)
+        );
+        std::invoke(std::forward<RenderFn>(render_fn), child_scope);
+    }
+
+    template<typename RenderFn>
+    void mount_invoke(std::string local_component_key, RenderFn&& render_fn) const
+    {
+        mount_invoke(
+            std::move(local_component_key),
+            {},
+            std::forward<RenderFn>(render_fn)
+        );
+    }
+
+    template<typename RenderFn>
+    void mount_invoke_auto(
+        RenderFn&& render_fn,
+        std::string_view key_prefix = "component",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    ) const
+    {
+        mount_invoke(
+            auto_local_key(key_prefix, salt, location),
+            std::forward<RenderFn>(render_fn)
+        );
+    }
+
+    template<typename RenderFn>
+    void mount_invoke_auto(
+        std::string local_mount_parent_key,
+        RenderFn&& render_fn,
+        std::string_view key_prefix = "component",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    ) const
+    {
+        mount_invoke(
+            auto_local_key(key_prefix, salt, location),
+            std::move(local_mount_parent_key),
+            std::forward<RenderFn>(render_fn)
         );
     }
 
