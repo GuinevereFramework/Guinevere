@@ -1,0 +1,220 @@
+#include <array>
+#include <filesystem>
+#include <iostream>
+#include <string>
+#include <vector>
+
+#include <guinevere/guinevere.hpp>
+
+namespace {
+
+std::string find_demo_image()
+{
+    const std::array<const char*, 5> candidates = {{
+        "../../../examples/assets/demo-image.png",
+        "../../examples/assets/demo-image.png",
+        "../examples/assets/demo-image.png",
+        "examples/assets/demo-image.png",
+        "C:/Windows/Web/Wallpaper/Windows/img0.jpg"
+    }};
+
+    for(const char* candidate : candidates) {
+        if(std::filesystem::exists(candidate)) {
+            return candidate;
+        }
+    }
+
+    return {};
+}
+
+} // namespace
+
+int main()
+{
+    const std::string image_path = find_demo_image();
+
+    guinevere::ui::UiRuntime ui_runtime("root");
+    guinevere::ui::StateStore::Scope ui_state = ui_runtime.state_store().scope("demo_window");
+    ui_state.use<int>("click_count", 0);
+    ui_runtime.reserve(12U);
+
+    guinevere::app::RunConfig config;
+    config.width = 960;
+    config.height = 640;
+    config.title = "Guinevere Demo Window (DRM)";
+    config.backend = guinevere::gfx::Backend::OpenGL;
+
+    guinevere::app::Callbacks callbacks;
+    callbacks.on_init = [&image_path](guinevere::app::Context& context) {
+        if(!image_path.empty()) {
+            (void)context.assets.register_image("demo_hero", image_path);
+        }
+    };
+
+    const auto render_frame = [&](
+                                  guinevere::app::Context& frame_context,
+                                  guinevere::ui::UiRuntime& runtime,
+                                  const guinevere::ui::AppScaffoldResult& scaffold
+                              ) -> bool {
+            const int click_count = ui_state.use<int>("click_count", 0);
+
+            auto& frame_builder = runtime.frame_builder();
+            const float body_gap = guinevere::ui::resolve_responsive_scalar(
+                scaffold.app_layout.breakpoint,
+                guinevere::ui::ResponsiveScalar{12.0f, 16.0f, 20.0f}
+            );
+            const bool show_visual_column =
+                scaffold.app_layout.breakpoint != guinevere::ui::AppBreakpoint::Compact;
+            guinevere::gfx::Rect controls_panel_rect = scaffold.body;
+            guinevere::gfx::Rect visual_column_rect{};
+            if(show_visual_column) {
+                const guinevere::ui::RectSplit body_columns = guinevere::ui::split_row_ratio_end(
+                    scaffold.body,
+                    0.34f,
+                    body_gap,
+                    220.0f,
+                    360.0f
+                );
+                controls_panel_rect = body_columns.start;
+                visual_column_rect = body_columns.end;
+            }
+            const float hero_height = guinevere::ui::resolve_axis_size(
+                visual_column_rect.h * 0.52f,
+                150.0f,
+                240.0f
+            );
+            const guinevere::gfx::Rect hero_rect =
+                guinevere::ui::split_column_start(visual_column_rect, hero_height).start;
+            const std::string subtitle_text =
+                "Framework-connected reusable buttons (DRM) - "
+                + std::string(guinevere::ui::app_breakpoint_label(scaffold.app_layout.breakpoint));
+            const guinevere::ui::RectSplit header_lines =
+                guinevere::ui::split_column_start(scaffold.header, 34.0f, 2.0f);
+
+            frame_builder
+                .label("root", "title", "Guinevere Demo Window")
+                .layout(header_lines.start);
+            frame_builder
+                .label("root", "subtitle", subtitle_text)
+                .layout(header_lines.end);
+            if(show_visual_column && frame_context.assets.has_image("demo_hero")) {
+                frame_builder
+                    .image_asset("root", "hero_image", "demo_hero")
+                    .layout(hero_rect);
+            }
+            frame_builder
+                .panel("root", "controls_panel")
+                .layout(controls_panel_rect)
+                .column(14.0f, 18.0f)
+                .align_stretch()
+                .justify_start();
+            frame_builder
+                .label("controls_panel", "controls_label", "Controls Panel (Auto Layout)");
+            frame_builder
+                .row("controls_panel", "button_row", 20.0f, 0.0f)
+                .height_fixed(64.0f)
+                .overflow_scroll()
+                .align_stretch()
+                .justify_start();
+            frame_builder
+                .button("button_row", "counter_increase", "Click me")
+                .on_click([&ui_state]() {
+                    ui_state.update<int>("click_count", [](int& value) {
+                        ++value;
+                    });
+                })
+                .width(guinevere::ui::ResponsiveProperty{
+                    .compact = 192.0f,
+                    .expanded = 240.0f
+                })
+                .height_fixed(56.0f);
+            frame_builder
+                .button("button_row", "counter_reset", "Reset")
+                .on_click([&ui_state]() {
+                    ui_state.set<int>("click_count", 0);
+                })
+                .width(guinevere::ui::ResponsiveProperty{
+                    .compact = 192.0f,
+                    .expanded = 240.0f
+                })
+                .height_fixed(56.0f);
+            frame_builder
+                .button("button_row", "counter_info", "More")
+                .width(guinevere::ui::ResponsiveProperty{
+                    .compact = 192.0f,
+                    .expanded = 240.0f
+                })
+                .height_fixed(56.0f);
+            frame_builder
+                .label("controls_panel", "counter_text", "Button clicks: " + std::to_string(click_count));
+            frame_builder
+                .label("controls_panel", "counter_hint", "Scroll mouse wheel over button row to pan horizontally");
+
+            frame_context.renderer.clear(guinevere::gfx::Color{0.08f, 0.10f, 0.13f, 1.0f});
+
+            if(show_visual_column) {
+                const guinevere::ui::RectSplit after_hero =
+                    guinevere::ui::split_column_start(visual_column_rect, hero_rect.h, 20.0f);
+                const guinevere::gfx::Rect deco_space = after_hero.end;
+                const float deco_w = std::min(deco_space.w, 320.0f);
+                const float deco_h = std::min(
+                    std::max(120.0f, deco_space.h - 8.0f),
+                    180.0f
+                );
+                const guinevere::gfx::Rect blue_block = guinevere::ui::split_column_start(
+                    guinevere::ui::split_row_start(deco_space, deco_w).start,
+                    deco_h
+                ).start;
+                frame_context.renderer.fill_rect(
+                    blue_block,
+                    guinevere::gfx::Color{0.20f, 0.52f, 0.92f, 1.0f}
+                );
+                frame_context.renderer.stroke_rect(
+                    blue_block,
+                    guinevere::gfx::Color{0.92f, 0.96f, 1.0f, 1.0f},
+                    3.0f
+                );
+                frame_context.renderer.push_clip(guinevere::gfx::Rect{
+                    blue_block.x + 28.0f,
+                    blue_block.y + 20.0f,
+                    std::max(0.0f, blue_block.w - 88.0f),
+                    std::max(0.0f, blue_block.h - 56.0f)
+                });
+                frame_context.renderer.fill_rect(
+                    guinevere::gfx::Rect{
+                        blue_block.x - 40.0f,
+                        blue_block.y - 10.0f,
+                        blue_block.w + 80.0f,
+                        blue_block.h + 40.0f
+                    },
+                    guinevere::gfx::Color{0.92f, 0.32f, 0.27f, 1.0f}
+                );
+                frame_context.renderer.pop_clip();
+            }
+            return true;
+    };
+
+    callbacks.on_frame = [&](guinevere::app::Context& context) {
+        const guinevere::gfx::Rect viewport = ui_runtime.viewport(context);
+        return ui_runtime.app_frame(
+            context,
+            guinevere::ui::AppScaffoldSpec{
+                .app_layout = guinevere::ui::AppLayoutSpec{
+                    .min_width = 320.0f,
+                    .min_height = 420.0f,
+                    .max_height = viewport.h - 20.0f,
+                    .fill_viewport_height_below = 120.0f
+                },
+                .header_height = guinevere::ui::ResponsiveScalar{72.0f, 74.0f, 76.0f},
+                .header_gap = guinevere::ui::ResponsiveScalar{12.0f, 14.0f, 16.0f}
+            },
+            render_frame
+        );
+    };
+
+    const guinevere::app::ErrorCallback callbacks_error = [](std::string_view message) {
+        std::cerr << "[guinevere::app::run] " << message << '\n';
+    };
+
+    return guinevere::app::run(config, callbacks, callbacks_error);
+}
