@@ -1,5 +1,6 @@
 #pragma once
 
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <source_location>
@@ -121,7 +122,101 @@ inline void validate_qualified_key(std::string_view key, std::string_view contex
     return key_segment;
 }
 
+[[nodiscard]] inline std::string make_stable_auto_key_segment(
+    std::string_view prefix,
+    std::size_t salt
+)
+{
+    validate_key_segment(prefix, "ComponentScope stable auto key prefix");
+
+    std::uint64_t hash = 1469598103934665603ull;
+    hash = fnv1a_hash_text(hash, prefix);
+    hash = hash_append_u64(hash, static_cast<std::uint64_t>(salt));
+
+    constexpr char hex_digits[] = "0123456789abcdef";
+    std::string key_segment;
+    key_segment.reserve(prefix.size() + 1U + 16U);
+    key_segment.append(prefix);
+    key_segment.push_back('_');
+
+    for(int shift = 60; shift >= 0; shift -= 4) {
+        const std::uint64_t nibble = (hash >> static_cast<std::uint64_t>(shift)) & 0xFull;
+        key_segment.push_back(hex_digits[static_cast<std::size_t>(nibble)]);
+    }
+
+    return key_segment;
+}
+
+template<std::size_t N>
+struct FixedString {
+    char value[N]{};
+
+    constexpr FixedString(const char (&text)[N])
+    {
+        for(std::size_t i = 0; i < N; ++i) {
+            value[i] = text[i];
+        }
+    }
+
+    [[nodiscard]] constexpr std::string_view view() const noexcept
+    {
+        return std::string_view(value, N - 1U);
+    }
+};
+
+template<std::size_t N>
+FixedString(const char (&)[N]) -> FixedString<N>;
+
+[[nodiscard]] consteval bool is_valid_key_segment_literal(std::string_view key_segment)
+{
+    if(key_segment.empty()) {
+        return false;
+    }
+    for(const char c : key_segment) {
+        if(c == k_scope_key_separator) {
+            return false;
+        }
+    }
+    return true;
+}
+
+template<FixedString Name>
+struct LocalKeyTag {
+    static constexpr std::string_view value = Name.view();
+    static_assert(
+        is_valid_key_segment_literal(value),
+        "LocalKey must be a non-empty key segment without '.'"
+    );
+};
+
+template<typename ValueType, FixedString Name>
+struct StateKeyTag {
+    using value_type = ValueType;
+    static constexpr std::string_view value = Name.view();
+    static_assert(
+        is_valid_key_segment_literal(value),
+        "StateKey must be a non-empty key segment without '.'"
+    );
+};
+
+template<typename Key>
+concept LocalKeyType = requires {
+    { Key::value } -> std::convertible_to<std::string_view>;
+};
+
+template<typename Key>
+concept StateKeyType = requires {
+    typename Key::value_type;
+    { Key::value } -> std::convertible_to<std::string_view>;
+};
+
 } // namespace detail
+
+template<detail::FixedString Name>
+using LocalKey = detail::LocalKeyTag<Name>;
+
+template<typename ValueType, detail::FixedString Name>
+using StateKey = detail::StateKeyTag<ValueType, Name>;
 
 class StateStore {
 public:
@@ -217,10 +312,24 @@ public:
             return store_->use<T>(compose_key(key), std::move(initial));
         }
 
+        template<detail::StateKeyType Key>
+        typename Key::value_type& use(
+            typename Key::value_type initial = typename Key::value_type{}
+        )
+        {
+            return use<typename Key::value_type>(Key::value, std::move(initial));
+        }
+
         template<typename T>
         T* find(std::string_view key)
         {
             return store_->find<T>(compose_key(key));
+        }
+
+        template<detail::StateKeyType Key>
+        typename Key::value_type* find()
+        {
+            return find<typename Key::value_type>(Key::value);
         }
 
         template<typename T>
@@ -229,16 +338,34 @@ public:
             return store_->find<T>(compose_key(key));
         }
 
+        template<detail::StateKeyType Key>
+        const typename Key::value_type* find() const
+        {
+            return find<typename Key::value_type>(Key::value);
+        }
+
         template<typename T>
         void set(std::string_view key, T value)
         {
             store_->set<T>(compose_key(key), std::move(value));
         }
 
+        template<detail::StateKeyType Key>
+        void set(typename Key::value_type value)
+        {
+            set<typename Key::value_type>(Key::value, std::move(value));
+        }
+
         template<typename T, typename Updater>
         T& update(std::string_view key, Updater&& updater)
         {
             return store_->update<T>(compose_key(key), std::forward<Updater>(updater));
+        }
+
+        template<detail::StateKeyType Key, typename Updater>
+        typename Key::value_type& update(Updater&& updater)
+        {
+            return update<typename Key::value_type>(Key::value, std::forward<Updater>(updater));
         }
 
         [[nodiscard]] Subscription observe(std::string_view key, Observer observer)
@@ -256,9 +383,21 @@ public:
             return store_->contains(compose_key(key));
         }
 
+        template<detail::StateKeyType Key>
+        [[nodiscard]] bool contains() const
+        {
+            return contains(Key::value);
+        }
+
         void erase(std::string_view key)
         {
             store_->erase(compose_key(key));
+        }
+
+        template<detail::StateKeyType Key>
+        void erase()
+        {
+            erase(Key::value);
         }
 
         void clear()
@@ -460,6 +599,79 @@ public:
         return detail::make_auto_key_segment(key_prefix, salt, location);
     }
 
+    template<typename T>
+    T& use_auto(
+        T initial = T{},
+        std::string_view key_prefix = "state",
+        std::size_t salt = 0U
+    )
+    {
+        return state_scope_.use<T>(
+            stable_auto_local_key(key_prefix, salt),
+            std::move(initial)
+        );
+    }
+
+    template<typename T>
+    T* find_auto(
+        std::string_view key_prefix = "state",
+        std::size_t salt = 0U
+    )
+    {
+        return state_scope_.find<T>(stable_auto_local_key(key_prefix, salt));
+    }
+
+    template<typename T>
+    const T* find_auto(
+        std::string_view key_prefix = "state",
+        std::size_t salt = 0U
+    ) const
+    {
+        return state_scope_.find<T>(stable_auto_local_key(key_prefix, salt));
+    }
+
+    template<typename T>
+    void set_auto(
+        T value,
+        std::string_view key_prefix = "state",
+        std::size_t salt = 0U
+    )
+    {
+        state_scope_.set<T>(
+            stable_auto_local_key(key_prefix, salt),
+            std::move(value)
+        );
+    }
+
+    template<typename T, typename Updater>
+    T& update_auto(
+        Updater&& updater,
+        std::string_view key_prefix = "state",
+        std::size_t salt = 0U
+    )
+    {
+        return state_scope_.update<T>(
+            stable_auto_local_key(key_prefix, salt),
+            std::forward<Updater>(updater)
+        );
+    }
+
+    [[nodiscard]] bool contains_auto(
+        std::string_view key_prefix = "state",
+        std::size_t salt = 0U
+    ) const
+    {
+        return state_scope_.contains(stable_auto_local_key(key_prefix, salt));
+    }
+
+    void erase_auto(
+        std::string_view key_prefix = "state",
+        std::size_t salt = 0U
+    )
+    {
+        state_scope_.erase(stable_auto_local_key(key_prefix, salt));
+    }
+
     [[nodiscard]] std::string_view mount_parent_key() const noexcept
     {
         return mount_parent_key_;
@@ -580,6 +792,23 @@ public:
         );
     }
 
+    template<detail::LocalKeyType LocalMountParentKey, typename Component>
+    void mount_component_auto(
+        Component&& component,
+        std::string_view key_prefix = "component",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    ) const
+    {
+        mount_component_auto(
+            std::string(LocalMountParentKey::value),
+            std::forward<Component>(component),
+            key_prefix,
+            salt,
+            location
+        );
+    }
+
     template<typename RenderFn>
     void mount_invoke(
         std::string local_component_key,
@@ -634,6 +863,23 @@ public:
         );
     }
 
+    template<detail::LocalKeyType LocalMountParentKey, typename RenderFn>
+    void mount_invoke_auto(
+        RenderFn&& render_fn,
+        std::string_view key_prefix = "component",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    ) const
+    {
+        mount_invoke_auto(
+            std::string(LocalMountParentKey::value),
+            std::forward<RenderFn>(render_fn),
+            key_prefix,
+            salt,
+            location
+        );
+    }
+
     FrameBuilder::Entry add(
         std::string local_parent_key,
         std::string local_key,
@@ -665,6 +911,34 @@ public:
         return panel({}, std::move(local_key));
     }
 
+    template<detail::LocalKeyType LocalKey>
+    FrameBuilder::Entry panel()
+    {
+        return panel(std::string(LocalKey::value));
+    }
+
+    FrameBuilder::Entry panel_auto(
+        std::string_view key_prefix = "panel",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return panel(auto_local_key(key_prefix, salt, location));
+    }
+
+    FrameBuilder::Entry panel_auto(
+        std::string local_parent_key,
+        std::string_view key_prefix,
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return panel(
+            std::move(local_parent_key),
+            auto_local_key(key_prefix, salt, location)
+        );
+    }
+
     FrameBuilder::Entry view(std::string local_parent_key, std::string local_key)
     {
         return frame_builder_->view(
@@ -676,6 +950,34 @@ public:
     FrameBuilder::Entry view(std::string local_key)
     {
         return view({}, std::move(local_key));
+    }
+
+    template<detail::LocalKeyType LocalKey>
+    FrameBuilder::Entry view()
+    {
+        return view(std::string(LocalKey::value));
+    }
+
+    FrameBuilder::Entry view_auto(
+        std::string_view key_prefix = "view",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return view(auto_local_key(key_prefix, salt, location));
+    }
+
+    FrameBuilder::Entry view_auto(
+        std::string local_parent_key,
+        std::string_view key_prefix,
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return view(
+            std::move(local_parent_key),
+            auto_local_key(key_prefix, salt, location)
+        );
     }
 
     FrameBuilder::Entry column(
@@ -693,9 +995,85 @@ public:
         );
     }
 
+    FrameBuilder::Entry column(
+        std::string local_parent_key,
+        std::string local_key,
+        std::initializer_list<AxisTrack> tracks,
+        float gap = 6.0f,
+        float padding = 8.0f
+    )
+    {
+        return frame_builder_->column(
+            parent_key(local_parent_key),
+            node_key(local_key),
+            tracks,
+            gap,
+            padding
+        );
+    }
+
     FrameBuilder::Entry column(std::string local_key, float gap = 6.0f, float padding = 8.0f)
     {
         return column({}, std::move(local_key), gap, padding);
+    }
+
+    template<detail::LocalKeyType LocalKey>
+    FrameBuilder::Entry column(float gap = 6.0f, float padding = 8.0f)
+    {
+        return column(std::string(LocalKey::value), gap, padding);
+    }
+
+    FrameBuilder::Entry column(
+        std::string local_key,
+        std::initializer_list<AxisTrack> tracks,
+        float gap = 6.0f,
+        float padding = 8.0f
+    )
+    {
+        return column({}, std::move(local_key), tracks, gap, padding);
+    }
+
+    template<detail::LocalKeyType ParentKey, detail::LocalKeyType LocalKey>
+    FrameBuilder::Entry column(float gap = 6.0f, float padding = 8.0f)
+    {
+        return column(
+            std::string(ParentKey::value),
+            std::string(LocalKey::value),
+            gap,
+            padding
+        );
+    }
+
+    FrameBuilder::Entry column_auto(
+        float gap = 6.0f,
+        float padding = 8.0f,
+        std::string_view key_prefix = "column",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return column(
+            auto_local_key(key_prefix, salt, location),
+            gap,
+            padding
+        );
+    }
+
+    FrameBuilder::Entry column_auto(
+        std::string local_parent_key,
+        float gap = 6.0f,
+        float padding = 8.0f,
+        std::string_view key_prefix = "column",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return column(
+            std::move(local_parent_key),
+            auto_local_key(key_prefix, salt, location),
+            gap,
+            padding
+        );
     }
 
     FrameBuilder::Entry row(
@@ -713,9 +1091,81 @@ public:
         );
     }
 
+    FrameBuilder::Entry row(
+        std::string local_parent_key,
+        std::string local_key,
+        std::initializer_list<AxisTrack> tracks,
+        float gap = 6.0f,
+        float padding = 8.0f
+    )
+    {
+        return frame_builder_->row(
+            parent_key(local_parent_key),
+            node_key(local_key),
+            tracks,
+            gap,
+            padding
+        );
+    }
+
     FrameBuilder::Entry row(std::string local_key, float gap = 6.0f, float padding = 8.0f)
     {
         return row({}, std::move(local_key), gap, padding);
+    }
+
+    template<detail::LocalKeyType LocalKey>
+    FrameBuilder::Entry row(float gap = 6.0f, float padding = 8.0f)
+    {
+        return row(std::string(LocalKey::value), gap, padding);
+    }
+
+    FrameBuilder::Entry row(
+        std::string local_key,
+        std::initializer_list<AxisTrack> tracks,
+        float gap = 6.0f,
+        float padding = 8.0f
+    )
+    {
+        return row({}, std::move(local_key), tracks, gap, padding);
+    }
+
+    template<detail::LocalKeyType ParentKey, detail::LocalKeyType LocalKey>
+    FrameBuilder::Entry row(float gap = 6.0f, float padding = 8.0f)
+    {
+        return row(
+            std::string(ParentKey::value),
+            std::string(LocalKey::value),
+            gap,
+            padding
+        );
+    }
+
+    FrameBuilder::Entry row_auto(
+        float gap = 6.0f,
+        float padding = 8.0f,
+        std::string_view key_prefix = "row",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return row(auto_local_key(key_prefix, salt, location), gap, padding);
+    }
+
+    FrameBuilder::Entry row_auto(
+        std::string local_parent_key,
+        float gap = 6.0f,
+        float padding = 8.0f,
+        std::string_view key_prefix = "row",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return row(
+            std::move(local_parent_key),
+            auto_local_key(key_prefix, salt, location),
+            gap,
+            padding
+        );
     }
 
     FrameBuilder::Entry label(
@@ -736,6 +1186,50 @@ public:
         return label({}, std::move(local_key), std::move(text));
     }
 
+    template<detail::LocalKeyType LocalKey>
+    FrameBuilder::Entry label(std::string text)
+    {
+        return label(std::string(LocalKey::value), std::move(text));
+    }
+
+    template<detail::LocalKeyType ParentKey, detail::LocalKeyType LocalKey>
+    FrameBuilder::Entry label(std::string text)
+    {
+        return label(
+            std::string(ParentKey::value),
+            std::string(LocalKey::value),
+            std::move(text)
+        );
+    }
+
+    FrameBuilder::Entry label_auto(
+        std::string text,
+        std::string_view key_prefix = "label",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return label(
+            auto_local_key(key_prefix, salt, location),
+            std::move(text)
+        );
+    }
+
+    FrameBuilder::Entry label_auto(
+        std::string local_parent_key,
+        std::string text,
+        std::string_view key_prefix,
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return label(
+            std::move(local_parent_key),
+            auto_local_key(key_prefix, salt, location),
+            std::move(text)
+        );
+    }
+
     FrameBuilder::Entry image(
         std::string local_parent_key,
         std::string local_key,
@@ -752,6 +1246,34 @@ public:
     FrameBuilder::Entry image(std::string local_key, std::string image_source)
     {
         return image({}, std::move(local_key), std::move(image_source));
+    }
+
+    FrameBuilder::Entry image_auto(
+        std::string image_source,
+        std::string_view key_prefix = "image",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return image(
+            auto_local_key(key_prefix, salt, location),
+            std::move(image_source)
+        );
+    }
+
+    FrameBuilder::Entry image_auto(
+        std::string local_parent_key,
+        std::string image_source,
+        std::string_view key_prefix,
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return image(
+            std::move(local_parent_key),
+            auto_local_key(key_prefix, salt, location),
+            std::move(image_source)
+        );
     }
 
     FrameBuilder::Entry image_asset(
@@ -772,6 +1294,34 @@ public:
         return image_asset({}, std::move(local_key), std::move(image_asset_id));
     }
 
+    FrameBuilder::Entry image_asset_auto(
+        std::string image_asset_id,
+        std::string_view key_prefix = "image",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return image_asset(
+            auto_local_key(key_prefix, salt, location),
+            std::move(image_asset_id)
+        );
+    }
+
+    FrameBuilder::Entry image_asset_auto(
+        std::string local_parent_key,
+        std::string image_asset_id,
+        std::string_view key_prefix,
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return image_asset(
+            std::move(local_parent_key),
+            auto_local_key(key_prefix, salt, location),
+            std::move(image_asset_id)
+        );
+    }
+
     FrameBuilder::Entry button(
         std::string local_parent_key,
         std::string local_key,
@@ -788,6 +1338,50 @@ public:
     FrameBuilder::Entry button(std::string local_key, std::string text)
     {
         return button({}, std::move(local_key), std::move(text));
+    }
+
+    template<detail::LocalKeyType LocalKey>
+    FrameBuilder::Entry button(std::string text)
+    {
+        return button(std::string(LocalKey::value), std::move(text));
+    }
+
+    template<detail::LocalKeyType ParentKey, detail::LocalKeyType LocalKey>
+    FrameBuilder::Entry button(std::string text)
+    {
+        return button(
+            std::string(ParentKey::value),
+            std::string(LocalKey::value),
+            std::move(text)
+        );
+    }
+
+    FrameBuilder::Entry button_auto(
+        std::string text,
+        std::string_view key_prefix = "button",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return button(
+            auto_local_key(key_prefix, salt, location),
+            std::move(text)
+        );
+    }
+
+    FrameBuilder::Entry button_auto(
+        std::string local_parent_key,
+        std::string text,
+        std::string_view key_prefix,
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return button(
+            std::move(local_parent_key),
+            auto_local_key(key_prefix, salt, location),
+            std::move(text)
+        );
     }
 
     FrameBuilder::Entry text_edit(
@@ -808,6 +1402,50 @@ public:
         return text_edit({}, std::move(local_key), std::move(value_utf8));
     }
 
+    template<detail::LocalKeyType LocalKey>
+    FrameBuilder::Entry text_edit(std::string value_utf8)
+    {
+        return text_edit(std::string(LocalKey::value), std::move(value_utf8));
+    }
+
+    template<detail::LocalKeyType ParentKey, detail::LocalKeyType LocalKey>
+    FrameBuilder::Entry text_edit(std::string value_utf8)
+    {
+        return text_edit(
+            std::string(ParentKey::value),
+            std::string(LocalKey::value),
+            std::move(value_utf8)
+        );
+    }
+
+    FrameBuilder::Entry text_edit_auto(
+        std::string value_utf8,
+        std::string_view key_prefix = "text_edit",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return text_edit(
+            auto_local_key(key_prefix, salt, location),
+            std::move(value_utf8)
+        );
+    }
+
+    FrameBuilder::Entry text_edit_auto(
+        std::string local_parent_key,
+        std::string value_utf8,
+        std::string_view key_prefix,
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return text_edit(
+            std::move(local_parent_key),
+            auto_local_key(key_prefix, salt, location),
+            std::move(value_utf8)
+        );
+    }
+
     FrameBuilder::Entry custom(std::string local_parent_key, std::string local_key)
     {
         return frame_builder_->custom(
@@ -821,7 +1459,37 @@ public:
         return custom({}, std::move(local_key));
     }
 
+    FrameBuilder::Entry custom_auto(
+        std::string_view key_prefix = "custom",
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return custom(auto_local_key(key_prefix, salt, location));
+    }
+
+    FrameBuilder::Entry custom_auto(
+        std::string local_parent_key,
+        std::string_view key_prefix,
+        std::size_t salt = 0U,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return custom(
+            std::move(local_parent_key),
+            auto_local_key(key_prefix, salt, location)
+        );
+    }
+
 private:
+    [[nodiscard]] std::string stable_auto_local_key(
+        std::string_view key_prefix = "state",
+        std::size_t salt = 0U
+    ) const
+    {
+        return detail::make_stable_auto_key_segment(key_prefix, salt);
+    }
+
     FrameBuilder* frame_builder_ = nullptr;
     StateStore* state_store_ = nullptr;
     StateStore::Scope state_scope_;

@@ -891,6 +891,32 @@ private:
         return load_face(ttf_path, pixel_height, resource.fallback_face);
     }
 
+    void prewarm_common_glyphs(FontResource& resource)
+    {
+        // Prewarm frequently-changing UI glyphs to avoid first-interaction
+        // stutter/flicker when counters and labels start changing.
+        static constexpr std::uint32_t kCodepoints[] = {
+            static_cast<std::uint32_t>(' '),
+            static_cast<std::uint32_t>(':'),
+            static_cast<std::uint32_t>('-'),
+            static_cast<std::uint32_t>('.'),
+            static_cast<std::uint32_t>('0'),
+            static_cast<std::uint32_t>('1'),
+            static_cast<std::uint32_t>('2'),
+            static_cast<std::uint32_t>('3'),
+            static_cast<std::uint32_t>('4'),
+            static_cast<std::uint32_t>('5'),
+            static_cast<std::uint32_t>('6'),
+            static_cast<std::uint32_t>('7'),
+            static_cast<std::uint32_t>('8'),
+            static_cast<std::uint32_t>('9'),
+        };
+
+        for(const std::uint32_t codepoint : kCodepoints) {
+            (void)ensure_glyph(resource, codepoint);
+        }
+    }
+
     void destroy_font_resource(FontResource& resource)
     {
         if(resource.primary_face != nullptr) {
@@ -1013,14 +1039,16 @@ private:
         }
 #endif
 
-        // Keep font loading lazy: do not pre-rasterize ASCII upfront.
-        // Glyphs are uploaded only when text actually requests them.
+        // Keep loading mostly lazy, but prewarm a tiny common set to avoid
+        // visible first-interaction hitching on dynamic labels/counters.
         reset_glyph_atlas(fresh_resource);
 
         if(fresh_resource.glyph_texture == 0u) {
             destroy_font_resource(fresh_resource);
             return nullptr;
         }
+
+        prewarm_common_glyphs(fresh_resource);
 
         fresh_resource.last_used_frame = frame_index_;
         auto [it, inserted] = font_cache_.emplace(key, std::move(fresh_resource));

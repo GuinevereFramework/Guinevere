@@ -34,8 +34,6 @@ int main()
     const std::string image_path = find_demo_image();
 
     guinevere::ui::UiRuntime ui_runtime("root");
-    guinevere::ui::StateStore::Scope ui_state = ui_runtime.state_store().scope("demo_window");
-    ui_state.use<int>("click_count", 0);
     ui_runtime.reserve(12U);
 
     guinevere::app::RunConfig config;
@@ -56,9 +54,10 @@ int main()
                                   guinevere::ui::UiRuntime& runtime,
                                   const guinevere::ui::AppScaffoldResult& scaffold
                               ) -> bool {
-            const int click_count = ui_state.use<int>("click_count", 0);
+            guinevere::ui::ComponentScope component =
+                runtime.root_component("demo_window");
+            const int click_count = component.use_auto<int>(0, "click_count");
 
-            auto& frame_builder = runtime.frame_builder();
             const float body_gap = guinevere::ui::resolve_responsive_scalar(
                 scaffold.app_layout.breakpoint,
                 guinevere::ui::ResponsiveScalar{12.0f, 16.0f, 20.0f}
@@ -90,32 +89,35 @@ int main()
                 + std::string(guinevere::ui::app_breakpoint_label(scaffold.app_layout.breakpoint));
             const guinevere::ui::RectSplit header_lines =
                 guinevere::ui::split_column_start(scaffold.header, 34.0f, 2.0f);
+            const std::string controls_panel_key = component.auto_local_key("controls_panel");
+            const std::string button_row_key = component.auto_local_key("button_row");
 
-            auto title_entry = frame_builder.label("root", "title", "Guinevere Demo Window");
+            auto title_entry = component.label_auto("Guinevere Demo Window", "title");
             title_entry.layout(header_lines.start);
-            auto subtitle_entry = frame_builder.label("root", "subtitle", subtitle_text);
+            auto subtitle_entry = component.label_auto(subtitle_text, "subtitle");
             subtitle_entry.layout(header_lines.end);
             if(show_visual_column && frame_context.assets.has_image("demo_hero")) {
-                auto hero_entry = frame_builder.image_asset("root", "hero_image", "demo_hero");
+                auto hero_entry = component.image_asset_auto("demo_hero", "hero_image");
                 hero_entry.layout(hero_rect);
             }
-            auto controls_panel_entry = frame_builder.panel("root", "controls_panel");
+            auto controls_panel_entry = component.panel(controls_panel_key);
             controls_panel_entry.layout(controls_panel_rect);
             controls_panel_entry.column(14.0f, 18.0f);
             controls_panel_entry.align_stretch();
             controls_panel_entry.justify_start();
-            frame_builder.label("controls_panel", "controls_label", "Controls Panel (Auto Layout)");
-            auto button_row_entry = frame_builder.row("controls_panel", "button_row", 20.0f, 0.0f);
+            component.label_auto(controls_panel_key, "Controls Panel (Auto Layout)", "controls_label");
+            auto button_row_entry = component.row(controls_panel_key, button_row_key, 20.0f, 0.0f);
             button_row_entry.height_fixed(64.0f);
             button_row_entry.overflow_scroll();
             button_row_entry.align_stretch();
             button_row_entry.justify_start();
 
-            auto increase_button_entry = frame_builder.button("button_row", "counter_increase", "Click me");
-            increase_button_entry.on_click([&ui_state]() {
-                ui_state.update<int>("click_count", [](int& value) {
+            auto increase_button_entry =
+                component.button_auto(button_row_key, "Click me", "counter_increase");
+            increase_button_entry.on_click([component]() mutable {
+                component.update_auto<int>([](int& value) {
                     ++value;
-                });
+                }, "click_count");
             });
             increase_button_entry.width(guinevere::ui::ResponsiveProperty{
                 .compact = 192.0f,
@@ -123,9 +125,9 @@ int main()
             });
             increase_button_entry.height_fixed(56.0f);
 
-            auto reset_button_entry = frame_builder.button("button_row", "counter_reset", "Reset");
-            reset_button_entry.on_click([&ui_state]() {
-                ui_state.set<int>("click_count", 0);
+            auto reset_button_entry = component.button_auto(button_row_key, "Reset", "counter_reset");
+            reset_button_entry.on_click([component]() mutable {
+                component.set_auto<int>(0, "click_count");
             });
             reset_button_entry.width(guinevere::ui::ResponsiveProperty{
                 .compact = 192.0f,
@@ -133,22 +135,22 @@ int main()
             });
             reset_button_entry.height_fixed(56.0f);
 
-            auto info_button_entry = frame_builder.button("button_row", "counter_info", "More");
+            auto info_button_entry = component.button_auto(button_row_key, "More", "counter_info");
             info_button_entry.width(guinevere::ui::ResponsiveProperty{
                 .compact = 192.0f,
                 .expanded = 240.0f
             });
             info_button_entry.height_fixed(56.0f);
 
-            frame_builder.label(
-                "controls_panel",
-                "counter_text",
-                "Button clicks: " + std::to_string(click_count)
+            component.label_auto(
+                controls_panel_key,
+                "Button clicks: " + std::to_string(click_count),
+                "counter_text"
             );
-            frame_builder.label(
-                "controls_panel",
-                "counter_hint",
-                "Scroll mouse wheel over button row to pan horizontally"
+            component.label_auto(
+                controls_panel_key,
+                "Scroll mouse wheel over button row to pan horizontally",
+                "counter_hint"
             );
 
             frame_context.renderer.clear(guinevere::gfx::Color{0.08f, 0.10f, 0.13f, 1.0f});
