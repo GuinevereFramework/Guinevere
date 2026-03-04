@@ -483,12 +483,14 @@ int main()
             }
         };
 
-        component_scope.mount_component_auto(
+        component_scope.mount_component(
+            component_scope.auto_local_key(
+                "counter_component",
+                0U,
+                counter_component_location
+            ),
             layout_root_key,
-            AutoCounterComponent{counter_title_location},
-            "counter_component",
-            0U,
-            counter_component_location
+            AutoCounterComponent{counter_title_location}
         );
 
         const auto hint_component_location = std::source_location::current();
@@ -504,7 +506,12 @@ int main()
             hint_text_location
         );
 
-        component_scope.mount_invoke_auto(
+        component_scope.mount_invoke(
+            component_scope.auto_local_key(
+                "hint_component",
+                0U,
+                hint_component_location
+            ),
             layout_root_key,
             [hint_text_location](guinevere::ui::ComponentScope& component) {
                 const std::string text_key = component.auto_local_key(
@@ -513,10 +520,7 @@ int main()
                     hint_text_location
                 );
                 (void)component.label(text_key, "Hint");
-            },
-            "hint_component",
-            0U,
-            hint_component_location
+            }
         );
 
         guinevere::ui::UiTree tree;
@@ -584,7 +588,7 @@ int main()
         if(tree.find("typed_component.panel") == guinevere::ui::UiTree::npos) {
             return 1;
         }
-        if(tree.find("typed_component.panel.title") == guinevere::ui::UiTree::npos) {
+        if(tree.find("typed_component.title") == guinevere::ui::UiTree::npos) {
             return 1;
         }
     }

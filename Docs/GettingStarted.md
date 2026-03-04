@@ -154,7 +154,7 @@ Guinevere does not bundle the whole font set into your `.exe` by default. Asset 
 - Treat UI/state keys as key *segments* (for example `panel`, `increase`, `reset`) and avoid dots in local keys; `ComponentScope`/`StateStore::Scope` now validate this.
 - Prefer `ComponentScope::auto_local_key(...)` when possible to avoid typo-prone manual IDs. Use `salt` (for example loop index) when the same callsite emits multiple siblings.
 - Duplicate node keys in the same frame are rejected with an exception instead of being silently ignored.
-- For DRM component composition, prefer `mount_component_auto(...)` / `mount_invoke_auto(...)` (or `mount_component(...)` / `mount_invoke(...)` with explicit keys) to avoid manual `mount(...)` + temporary `ComponentScope` boilerplate.
+- For DRM component composition, prefer `mount_component(...)` / `mount_invoke(...)` with keys from `auto_local_key(...)` to avoid manual `mount(...)` + temporary `ComponentScope` boilerplate.
 - Persist UI/app state across frames with `StateStore` and `scope(...)`.
 - Reconcile into `UiTree` via `Reconciler::reconcile(...)`.
 - Begin/end input processing via `InteractionState::begin_frame(...)` / `end_frame(...)`.
