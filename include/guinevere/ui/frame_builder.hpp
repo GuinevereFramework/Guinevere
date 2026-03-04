@@ -119,11 +119,31 @@ public:
             node().node.layout_config.padding = padding;
         }
 
+        void column(
+            std::initializer_list<AxisTrack> tracks,
+            float gap = 6.0f,
+            float padding = 8.0f
+        )
+        {
+            column(gap, padding);
+            main_axis_tracks(std::move(tracks));
+        }
+
         void row(float gap = 6.0f, float padding = 8.0f)
         {
             node().node.layout_config.direction = LayoutDirection::Row;
             node().node.layout_config.gap = gap;
             node().node.layout_config.padding = padding;
+        }
+
+        void row(
+            std::initializer_list<AxisTrack> tracks,
+            float gap = 6.0f,
+            float padding = 8.0f
+        )
+        {
+            row(gap, padding);
+            main_axis_tracks(std::move(tracks));
         }
 
         void align(AlignItems value)
@@ -144,6 +164,11 @@ public:
         void main_axis_tracks(std::vector<LayoutConfig::AxisTrackConstraint> tracks)
         {
             node().node.layout_config.main_axis_tracks = std::move(tracks);
+        }
+
+        void main_axis_tracks(std::initializer_list<AxisTrack> tracks)
+        {
+            node().node.layout_config.main_axis_tracks = axis_tracks(tracks);
         }
 
         void clear_main_axis_tracks()
@@ -382,10 +407,36 @@ public:
         return entry;
     }
 
+    Entry column(
+        std::string parent_key,
+        std::string key,
+        std::initializer_list<AxisTrack> tracks,
+        float gap = 6.0f,
+        float padding = 8.0f
+    )
+    {
+        Entry entry = view(std::move(parent_key), std::move(key));
+        entry.column(std::move(tracks), gap, padding);
+        return entry;
+    }
+
     Entry row(std::string parent_key, std::string key, float gap = 6.0f, float padding = 8.0f)
     {
         Entry entry = view(std::move(parent_key), std::move(key));
         entry.row(gap, padding);
+        return entry;
+    }
+
+    Entry row(
+        std::string parent_key,
+        std::string key,
+        std::initializer_list<AxisTrack> tracks,
+        float gap = 6.0f,
+        float padding = 8.0f
+    )
+    {
+        Entry entry = view(std::move(parent_key), std::move(key));
+        entry.row(std::move(tracks), gap, padding);
         return entry;
     }
 

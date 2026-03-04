@@ -31,7 +31,9 @@ int main()
 {
     using guinevere::gfx::Rect;
     using guinevere::ui::EdgeInsets;
+    using guinevere::ui::Flex;
     using guinevere::ui::FrameBuilder;
+    using guinevere::ui::Fixed;
     using guinevere::ui::ReconciledNode;
     using guinevere::ui::RectSplit;
     using guinevere::ui::ResponsiveProperty;
@@ -172,6 +174,35 @@ int main()
     }
 
     {
+        const std::vector<AxisTrackConstraint> tracks = guinevere::ui::axis_tracks({
+            Flex(0.0f).min(64.0f).pref(100.0f).priority(1),
+            Flex(1.0f).min(120.0f).pref(120.0f).priority(2),
+            Fixed(40.0f).priority(3)
+        });
+        if(tracks.size() != 3U) {
+            return 1;
+        }
+        if(!approx(tracks[0].min_size, 64.0f)
+            || !approx(tracks[0].preferred_size, 100.0f)
+            || !approx(tracks[0].grow_weight, 0.0f)
+            || tracks[0].shrink_priority != 1) {
+            return 1;
+        }
+        if(!approx(tracks[1].min_size, 120.0f)
+            || !approx(tracks[1].preferred_size, 120.0f)
+            || !approx(tracks[1].grow_weight, 1.0f)
+            || tracks[1].shrink_priority != 2) {
+            return 1;
+        }
+        if(!approx(tracks[2].min_size, 40.0f)
+            || !approx(tracks[2].preferred_size, 40.0f)
+            || !approx(tracks[2].max_size, 40.0f)
+            || tracks[2].shrink_priority != 3) {
+            return 1;
+        }
+    }
+
+    {
         const std::vector<float> tracks = guinevere::ui::resolve_axis_tracks(
             800.0f,
             std::vector<AxisTrackConstraint>{
@@ -276,30 +307,11 @@ int main()
 
         auto root_panel = tracks_frame_builder.panel("root", "layout_root");
         root_panel.layout(Rect{0.0f, 0.0f, 400.0f, 400.0f});
-        root_panel.column(10.0f, 20.0f);
-        root_panel.main_axis_tracks(std::vector<AxisTrackConstraint>{
-            AxisTrackConstraint{
-                .min_size = 100.0f,
-                .preferred_size = 100.0f,
-                .max_size = 100.0f,
-                .grow_weight = 0.0f,
-                .shrink_priority = 1
-            },
-            AxisTrackConstraint{
-                .min_size = 80.0f,
-                .preferred_size = 100.0f,
-                .max_size = 0.0f,
-                .grow_weight = 1.0f,
-                .shrink_priority = 2
-            },
-            AxisTrackConstraint{
-                .min_size = 40.0f,
-                .preferred_size = 40.0f,
-                .max_size = 40.0f,
-                .grow_weight = 0.0f,
-                .shrink_priority = 3
-            }
-        });
+        root_panel.column({
+            Fixed(100.0f).priority(1),
+            Flex(1.0f).min(80.0f).pref(100.0f).priority(2),
+            Fixed(40.0f).priority(3)
+        }, 10.0f, 20.0f);
 
         (void)tracks_frame_builder.panel("layout_root", "track_a");
         (void)tracks_frame_builder.panel("layout_root", "track_b");
@@ -533,6 +545,46 @@ int main()
             invalid_state_key_rejected = true;
         }
         if(!invalid_state_key_rejected) {
+            return 1;
+        }
+    }
+
+    {
+        using CountKey = guinevere::ui::StateKey<int, "count">;
+        using PanelKey = guinevere::ui::LocalKey<"panel">;
+        using TitleKey = guinevere::ui::LocalKey<"title">;
+
+        guinevere::ui::StateStore scoped_state_store;
+        std::vector<ReconciledNode> component_frame;
+        FrameBuilder component_builder(component_frame);
+        guinevere::ui::ComponentScope component_scope(
+            component_builder,
+            scoped_state_store,
+            "root",
+            "typed_component"
+        );
+
+        auto scoped_state = component_scope.state();
+        const int value = scoped_state.use<CountKey>(1);
+        if(value != 1) {
+            return 1;
+        }
+        scoped_state.update<CountKey>([](int& count) {
+            count += 2;
+        });
+        if(scoped_state.use<CountKey>(0) != 3) {
+            return 1;
+        }
+
+        (void)component_scope.panel<PanelKey>();
+        (void)component_scope.label<PanelKey, TitleKey>("Typed Keys");
+
+        guinevere::ui::UiTree tree;
+        guinevere::ui::Reconciler::reconcile(tree, "root", component_frame);
+        if(tree.find("typed_component.panel") == guinevere::ui::UiTree::npos) {
+            return 1;
+        }
+        if(tree.find("typed_component.panel.title") == guinevere::ui::UiTree::npos) {
             return 1;
         }
     }

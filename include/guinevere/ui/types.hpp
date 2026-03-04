@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <initializer_list>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -139,6 +140,73 @@ struct LayoutConfig {
     float fixed_height = 0.0f;
     std::vector<AxisTrackConstraint> main_axis_tracks{};
 };
+
+struct AxisTrack {
+    LayoutConfig::AxisTrackConstraint value{};
+
+    [[nodiscard]] constexpr AxisTrack& min(float min_size_value) noexcept
+    {
+        value.min_size = min_size_value;
+        return *this;
+    }
+
+    [[nodiscard]] constexpr AxisTrack& pref(float preferred_size_value) noexcept
+    {
+        value.preferred_size = preferred_size_value;
+        return *this;
+    }
+
+    [[nodiscard]] constexpr AxisTrack& max(float max_size_value) noexcept
+    {
+        value.max_size = max_size_value;
+        return *this;
+    }
+
+    [[nodiscard]] constexpr AxisTrack& grow(float grow_weight_value) noexcept
+    {
+        value.grow_weight = grow_weight_value;
+        return *this;
+    }
+
+    [[nodiscard]] constexpr AxisTrack& priority(int shrink_priority_value) noexcept
+    {
+        value.shrink_priority = shrink_priority_value;
+        return *this;
+    }
+
+    [[nodiscard]] constexpr operator LayoutConfig::AxisTrackConstraint() const noexcept
+    {
+        return value;
+    }
+};
+
+[[nodiscard]] constexpr AxisTrack Flex(float grow_weight = 1.0f) noexcept
+{
+    AxisTrack out{};
+    out.value.grow_weight = grow_weight;
+    return out;
+}
+
+[[nodiscard]] constexpr AxisTrack Fixed(float size) noexcept
+{
+    AxisTrack out{};
+    out.value.min_size = size;
+    out.value.preferred_size = size;
+    out.value.max_size = size;
+    return out;
+}
+
+[[nodiscard]] inline std::vector<LayoutConfig::AxisTrackConstraint> axis_tracks(
+    std::initializer_list<AxisTrack> tracks
+)
+{
+    std::vector<LayoutConfig::AxisTrackConstraint> out;
+    out.reserve(tracks.size());
+    for(const AxisTrack& track : tracks) {
+        out.push_back(static_cast<LayoutConfig::AxisTrackConstraint>(track));
+    }
+    return out;
+}
 
 enum class AppBreakpoint {
     Compact,
