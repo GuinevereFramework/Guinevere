@@ -50,12 +50,9 @@ int main()
     };
 
     const auto render_frame = [&](
-                                  guinevere::app::Context& frame_context,
-                                  guinevere::ui::UiRuntime& runtime,
+                                  guinevere::ui::ComponentScope& component,
                                   const guinevere::ui::AppScaffoldResult& scaffold
                               ) -> bool {
-            guinevere::ui::ComponentScope component =
-                runtime.root_component("demo_window");
             const int click_count = component.state().use<int>("click_count", 0);
 
             const float body_gap = guinevere::ui::resolve_responsive_scalar(
@@ -102,7 +99,7 @@ int main()
                 subtitle_text
             );
             subtitle_entry.layout(header_lines.end);
-            if(show_visual_column && frame_context.assets.has_image("demo_hero")) {
+            if(show_visual_column) {
                 auto hero_entry =
                     component.image_asset(component.auto_local_key("hero_image"), "demo_hero");
                 hero_entry.layout(hero_rect);
@@ -176,8 +173,6 @@ int main()
                 "Scroll mouse wheel over button row to pan horizontally"
             );
 
-            frame_context.renderer.clear(guinevere::gfx::Color{0.08f, 0.10f, 0.13f, 1.0f});
-
             if(show_visual_column) {
                 const guinevere::ui::RectSplit after_hero =
                     guinevere::ui::split_column_start(visual_column_rect, hero_rect.h, 20.0f);
@@ -187,42 +182,29 @@ int main()
                     std::max(120.0f, deco_space.h - 8.0f),
                     180.0f
                 );
-                const guinevere::gfx::Rect blue_block = guinevere::ui::split_column_start(
+                const guinevere::gfx::Rect deco_block = guinevere::ui::split_column_start(
                     guinevere::ui::split_row_start(deco_space, deco_w).start,
                     deco_h
                 ).start;
-                frame_context.renderer.fill_rect(
-                    blue_block,
-                    guinevere::gfx::Color{0.20f, 0.52f, 0.92f, 1.0f}
-                );
-                frame_context.renderer.stroke_rect(
-                    blue_block,
-                    guinevere::gfx::Color{0.92f, 0.96f, 1.0f, 1.0f},
-                    3.0f
-                );
-                frame_context.renderer.push_clip(guinevere::gfx::Rect{
-                    blue_block.x + 28.0f,
-                    blue_block.y + 20.0f,
-                    std::max(0.0f, blue_block.w - 88.0f),
-                    std::max(0.0f, blue_block.h - 56.0f)
+                const std::string deco_block_key = component.auto_local_key("deco_block");
+                const std::string deco_inner_key = component.auto_local_key("deco_inner");
+                auto deco_block_entry = component.panel(deco_block_key);
+                deco_block_entry.layout(deco_block);
+                deco_block_entry.overflow_clip();
+                auto deco_inner_entry = component.panel(deco_block_key, deco_inner_key);
+                deco_inner_entry.layout(guinevere::gfx::Rect{
+                    deco_block.x - 40.0f,
+                    deco_block.y - 10.0f,
+                    deco_block.w + 80.0f,
+                    deco_block.h + 40.0f
                 });
-                frame_context.renderer.fill_rect(
-                    guinevere::gfx::Rect{
-                        blue_block.x - 40.0f,
-                        blue_block.y - 10.0f,
-                        blue_block.w + 80.0f,
-                        blue_block.h + 40.0f
-                    },
-                    guinevere::gfx::Color{0.92f, 0.32f, 0.27f, 1.0f}
-                );
-                frame_context.renderer.pop_clip();
             }
             return true;
     };
 
     callbacks.on_frame = [&](guinevere::app::Context& context) {
         const guinevere::gfx::Rect viewport = ui_runtime.viewport(context);
-        return ui_runtime.app_frame(
+        return ui_runtime.component_frame(
             context,
             guinevere::ui::AppScaffoldSpec{
                 .app_layout = guinevere::ui::AppLayoutSpec{
@@ -234,7 +216,9 @@ int main()
                 .header_height = guinevere::ui::ResponsiveScalar{72.0f, 74.0f, 76.0f},
                 .header_gap = guinevere::ui::ResponsiveScalar{12.0f, 14.0f, 16.0f}
             },
-            render_frame
+            "demo_window",
+            render_frame,
+            guinevere::gfx::Color{0.08f, 0.10f, 0.13f, 1.0f}
         );
     };
 

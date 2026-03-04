@@ -158,8 +158,7 @@ int main()
     guinevere::app::Callbacks callbacks;
 
     const auto render_frame = [&](
-                                  guinevere::app::Context& frame_context,
-                                  guinevere::ui::UiRuntime& runtime,
+                                  guinevere::ui::ComponentScope& app_component,
                                   const guinevere::ui::AppScaffoldResult& scaffold
                               ) -> bool {
             const guinevere::gfx::Rect layout_bounds = scaffold.body;
@@ -179,8 +178,6 @@ int main()
                 guinevere::ui::EdgeInsets{20.0f, 0.0f, 0.0f, 0.0f}
             );
 
-            guinevere::ui::ComponentScope app_component =
-                runtime.root_component("demo_drm");
             const std::string layout_root_key = app_component.auto_local_key("layout_root");
             const std::string counter_row_key = app_component.auto_local_key("counter_row");
             const std::string detail_column_key = app_component.auto_local_key("detail_column");
@@ -241,13 +238,12 @@ int main()
             footer_entry.align_center();
             footer_entry.justify_start();
 
-            frame_context.renderer.clear(guinevere::gfx::Color{0.08f, 0.10f, 0.13f, 1.0f});
             return true;
     };
 
     callbacks.on_frame = [&](guinevere::app::Context& context) {
         const guinevere::gfx::Rect viewport = ui_runtime.viewport(context);
-        return ui_runtime.app_frame(
+        return ui_runtime.component_frame(
             context,
             guinevere::ui::AppScaffoldSpec{
                 .app_layout = guinevere::ui::AppLayoutSpec{
@@ -259,7 +255,9 @@ int main()
                 .header_height = guinevere::ui::ResponsiveScalar{34.0f, 36.0f, 38.0f},
                 .header_gap = guinevere::ui::ResponsiveScalar{10.0f, 12.0f, 14.0f}
             },
-            render_frame
+            "demo_drm",
+            render_frame,
+            guinevere::gfx::Color{0.08f, 0.10f, 0.13f, 1.0f}
         );
     };
 

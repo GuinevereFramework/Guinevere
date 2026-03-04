@@ -122,6 +122,62 @@ public:
     }
 
     template<typename BuildFn>
+    bool component_frame(
+        app::Context& context,
+        std::string component_key_prefix,
+        BuildFn&& build,
+        std::optional<gfx::Color> clear_color = std::nullopt
+    )
+    {
+        auto frame_scope = frame(context, clear_color);
+        ComponentScope root = frame_scope.root_component(std::move(component_key_prefix));
+
+        if constexpr(std::is_invocable_r_v<bool, BuildFn, ComponentScope&>) {
+            const bool keep_running = std::invoke(
+                std::forward<BuildFn>(build),
+                root
+            );
+            (void)frame_scope.end();
+            return keep_running;
+        } else if constexpr(std::is_invocable_r_v<bool, BuildFn, ComponentScope&, UiRuntime&>) {
+            const bool keep_running = std::invoke(
+                std::forward<BuildFn>(build),
+                root,
+                *this
+            );
+            (void)frame_scope.end();
+            return keep_running;
+        } else if constexpr(std::is_invocable_v<BuildFn, ComponentScope&>) {
+            std::invoke(std::forward<BuildFn>(build), root);
+            (void)frame_scope.end();
+            return true;
+        } else {
+            static_assert(
+                std::is_invocable_v<BuildFn, ComponentScope&, UiRuntime&>,
+                "UiRuntime::component_frame callback must accept (ComponentScope&) or (ComponentScope&, UiRuntime&) and return void or bool."
+            );
+            std::invoke(std::forward<BuildFn>(build), root, *this);
+            (void)frame_scope.end();
+            return true;
+        }
+    }
+
+    template<typename BuildFn>
+    bool component_frame(
+        app::Context& context,
+        BuildFn&& build,
+        std::optional<gfx::Color> clear_color = std::nullopt
+    )
+    {
+        return component_frame(
+            context,
+            std::string("app"),
+            std::forward<BuildFn>(build),
+            clear_color
+        );
+    }
+
+    template<typename BuildFn>
     bool app_frame(
         app::Context& context,
         const AppScaffoldSpec& scaffold_spec,
@@ -160,6 +216,85 @@ public:
             (void)frame_scope.end();
             return true;
         }
+    }
+
+    template<typename BuildFn>
+    bool component_frame(
+        app::Context& context,
+        const AppScaffoldSpec& scaffold_spec,
+        std::string component_key_prefix,
+        BuildFn&& build,
+        std::optional<gfx::Color> clear_color = std::nullopt
+    )
+    {
+        auto frame_scope = frame(context, clear_color);
+        app::Context& frame_context = frame_scope.context();
+        const AppScaffoldResult scaffold = resolve_scaffold(frame_context, scaffold_spec);
+        ComponentScope root = frame_scope.root_component(std::move(component_key_prefix));
+
+        if constexpr(std::is_invocable_r_v<
+                         bool,
+                         BuildFn,
+                         ComponentScope&,
+                         const AppScaffoldResult&>) {
+            const bool keep_running = std::invoke(
+                std::forward<BuildFn>(build),
+                root,
+                scaffold
+            );
+            (void)frame_scope.end();
+            return keep_running;
+        } else if constexpr(std::is_invocable_r_v<
+                                bool,
+                                BuildFn,
+                                ComponentScope&,
+                                UiRuntime&,
+                                const AppScaffoldResult&>) {
+            const bool keep_running = std::invoke(
+                std::forward<BuildFn>(build),
+                root,
+                *this,
+                scaffold
+            );
+            (void)frame_scope.end();
+            return keep_running;
+        } else if constexpr(std::is_invocable_v<
+                                BuildFn,
+                                ComponentScope&,
+                                const AppScaffoldResult&>) {
+            std::invoke(std::forward<BuildFn>(build), root, scaffold);
+            (void)frame_scope.end();
+            return true;
+        } else {
+            static_assert(
+                std::is_invocable_v<
+                    BuildFn,
+                    ComponentScope&,
+                    UiRuntime&,
+                    const AppScaffoldResult&>,
+                "UiRuntime::component_frame callback must accept (ComponentScope&, const AppScaffoldResult&) or (ComponentScope&, UiRuntime&, const AppScaffoldResult&) and return void or bool."
+            );
+            std::invoke(std::forward<BuildFn>(build), root, *this, scaffold);
+            (void)frame_scope.end();
+            return true;
+        }
+    }
+
+    template<typename BuildFn>
+    bool component_frame(
+        app::Context& context,
+        const AppScaffoldSpec& scaffold_spec,
+        BuildFn&& build,
+        std::optional<gfx::Color> clear_color = std::nullopt
+    )
+    {
+        return component_frame(
+            context,
+            scaffold_spec,
+            std::string("app"),
+            std::forward<BuildFn>(build),
+            clear_color
+        );
     }
 
     void begin_frame(InputState input) noexcept;

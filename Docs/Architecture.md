@@ -72,6 +72,7 @@ Guinevere uses a retained UI pipeline:
 - `Pipeline` runs layout and emits backend-independent draw commands.
 - Draw commands are executed through `guinevere::gfx::Renderer`.
 - Draw commands can resolve asset URIs through `guinevere::asset::AssetManager` during paint.
+- `UiRuntime::component_frame(...)` lets app callbacks build UI via `ComponentScope` without touching renderer APIs.
 
 ### Current DRM scope
 

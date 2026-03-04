@@ -76,17 +76,17 @@ int main()
 
 Low-level manual control (`GlfwWindow`, `create_renderer`, custom loop) remains available for advanced use cases.
 
-For DRM code inside `app::run(...)`, prefer `UiRuntime::app_frame(...)` to avoid begin/end boilerplate:
+For DRM code inside `app::run(...)`, prefer `UiRuntime::component_frame(...)` so your frame callback works with `ComponentScope` only:
 
 ```cpp
 callbacks.on_frame = [&](guinevere::app::Context& context) {
-    return ui_runtime.app_frame(
+    return ui_runtime.component_frame(
         context,
-        [](guinevere::app::Context& frame_context, guinevere::ui::UiRuntime& runtime) {
-            auto& builder = runtime.frame_builder();
-            builder.label("root", "title", "Hello DRM");
-            frame_context.renderer.clear(guinevere::gfx::Color{0.08f, 0.10f, 0.13f, 1.0f});
-        }
+        "app",
+        [](guinevere::ui::ComponentScope& component) {
+            component.label("title", "Hello DRM");
+        },
+        guinevere::gfx::Color{0.08f, 0.10f, 0.13f, 1.0f}
     ); // continues running by default if callback returns void
 };
 ```
@@ -135,11 +135,11 @@ Guinevere does not bundle the whole font set into your `.exe` by default. Asset 
 - Build a list of keyed node declarations (prefer `FrameBuilder` for concise syntax).
 - Compose containers with `FrameBuilder::column(...)` / `row(...)`.
 - Prefer `UiRuntime` for app code:
-  `app_frame(context, ...)` (one-shot) or `frame(context)` (compact RAII), or manual `begin_frame(context)` -> build nodes via `frame_builder()` -> `end_frame(context)`.
+  `component_frame(context, ...)` (component-only, one-shot), `app_frame(context, ...)` (advanced callback with `app::Context`), `frame(context)` (compact RAII), or manual `begin_frame(context)` -> build nodes via `frame_builder()` -> `end_frame(context)`.
   `end_frame(context)` does full redraw by default; pass `clear_color` to use dirty-region paint mode.
 - Use `resolve_app_layout(...)` for app-level responsive container (breakpoint + margins + safe area).
 - Use `resolve_app_scaffold(...)` when you want ready-to-use `header/body` regions from one app-level config.
-- Prefer `UiRuntime::app_frame(context, scaffold_spec, callback)` when your frame uses scaffold every tick (auto begin/end + auto breakpoint from scaffold).
+- Prefer `UiRuntime::component_frame(context, scaffold_spec, callback)` when your frame uses scaffold every tick (auto begin/end + auto breakpoint from scaffold, no renderer access in callback).
 - Prefer `UiRuntime::resolve_scaffold(context, spec)` in app code to auto-resolve from framebuffer viewport and auto-set `frame_builder().app_breakpoint(...)`.
 - Use `UiRuntime::viewport(context)` when a part of your spec depends on runtime viewport size (for example, `max_height = viewport.h - 20`).
 - Use `layout_in_viewport(...)` for responsive root bounds instead of hand-written viewport clamp logic.
