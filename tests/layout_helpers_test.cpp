@@ -1,6 +1,7 @@
 #include <cmath>
 #include <source_location>
 #include <stdexcept>
+#include <unordered_set>
 
 #include <guinevere/ui/runtime.hpp>
 
@@ -375,7 +376,7 @@ int main()
             "demo_component"
         );
         try {
-            (void)component_scope.panel("bad.key");
+            (void)component_scope.panel({}, "bad.key");
         } catch(const std::invalid_argument&) {
             invalid_component_key_rejected = true;
         }
@@ -394,12 +395,12 @@ int main()
             "root",
             "demo_component"
         );
-        (void)component_scope.panel("layout_root");
+        (void)component_scope.panel({}, "layout_root");
 
         struct CounterComponent {
             void render(guinevere::ui::ComponentScope& component) const
             {
-                (void)component.label("title", "Counter");
+                (void)component.label({}, "title", "Counter");
             }
         };
 
@@ -408,7 +409,7 @@ int main()
             "hint",
             "layout_root",
             [](guinevere::ui::ComponentScope& component) {
-                (void)component.label("text", "Hint");
+                (void)component.label({}, "text", "Hint");
             }
         );
 
@@ -454,7 +455,7 @@ int main()
         }
 
         const std::string layout_root_key = component_scope.auto_local_key("layout_root");
-        (void)component_scope.panel(layout_root_key);
+        (void)component_scope.panel({}, layout_root_key);
 
         const auto counter_component_location = std::source_location::current();
         const std::string counter_component_key = component_scope.auto_local_key(
@@ -479,7 +480,7 @@ int main()
                     0U,
                     title_location
                 );
-                (void)component.label(title_key, "Counter");
+                (void)component.label({}, title_key, "Counter");
             }
         };
 
@@ -519,7 +520,7 @@ int main()
                     0U,
                     hint_text_location
                 );
-                (void)component.label(text_key, "Hint");
+                (void)component.label({}, text_key, "Hint");
             }
         );
 
@@ -536,6 +537,52 @@ int main()
            )
             == guinevere::ui::UiTree::npos) {
             return 1;
+        }
+    }
+
+    {
+        const auto build_auto_key_frame = []() {
+            guinevere::ui::StateStore scoped_state_store;
+            std::vector<ReconciledNode> component_frame;
+            FrameBuilder component_builder(component_frame);
+            guinevere::ui::ComponentScope component_scope(
+                component_builder,
+                scoped_state_store,
+                "root",
+                "implicit_component"
+            );
+
+            constexpr std::string_view container_key = "container";
+            (void)component_scope.panel({}, std::string(container_key));
+            (void)component_scope.label(std::string(container_key), "Auto Label");
+            (void)component_scope.button(std::string(container_key), "Auto Button");
+            (void)component_scope.text_edit(std::string(container_key), "Auto TextEdit");
+            (void)component_scope.image_asset(std::string(container_key), "demo_hero");
+            return component_frame;
+        };
+
+        const std::vector<ReconciledNode> frame_a = build_auto_key_frame();
+        const std::vector<ReconciledNode> frame_b = build_auto_key_frame();
+        if(frame_a.size() != frame_b.size()) {
+            return 1;
+        }
+
+        std::unordered_set<std::string> frame_a_keys;
+        frame_a_keys.reserve(frame_a.size());
+        for(std::size_t i = 0U; i < frame_a.size(); ++i) {
+            if(frame_a[i].node.key != frame_b[i].node.key) {
+                return 1;
+            }
+            if(!frame_a_keys.insert(frame_a[i].node.key).second) {
+                return 1;
+            }
+        }
+
+        const std::string expected_container_parent = "implicit_component.container";
+        for(std::size_t i = 1U; i < frame_a.size(); ++i) {
+            if(frame_a[i].parent_key != expected_container_parent) {
+                return 1;
+            }
         }
     }
 

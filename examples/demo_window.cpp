@@ -89,43 +89,27 @@ int main()
             const std::string controls_panel_key = component.auto_local_key("controls_panel");
             const std::string button_row_key = component.auto_local_key("button_row");
 
-            auto title_entry = component.label(
-                component.auto_local_key("title"),
-                "Guinevere Demo Window"
-            );
+            auto title_entry = component.label("Guinevere Demo Window");
             title_entry.layout(header_lines.start);
-            auto subtitle_entry = component.label(
-                component.auto_local_key("subtitle"),
-                subtitle_text
-            );
+            auto subtitle_entry = component.label(subtitle_text);
             subtitle_entry.layout(header_lines.end);
             if(show_visual_column) {
-                auto hero_entry =
-                    component.image_asset(component.auto_local_key("hero_image"), "demo_hero");
+                auto hero_entry = component.image_asset("demo_hero");
                 hero_entry.layout(hero_rect);
             }
-            auto controls_panel_entry = component.panel(controls_panel_key);
+            auto controls_panel_entry = component.panel({}, controls_panel_key);
             controls_panel_entry.layout(controls_panel_rect);
             controls_panel_entry.column(14.0f, 18.0f);
             controls_panel_entry.align_stretch();
             controls_panel_entry.justify_start();
-            component.label(
-                controls_panel_key,
-                component.auto_local_key("controls_label"),
-                "Controls Panel (Auto Layout)"
-            );
+            component.label(controls_panel_key, "Controls Panel (Auto Layout)");
             auto button_row_entry = component.row(controls_panel_key, button_row_key, 20.0f, 0.0f);
             button_row_entry.height_fixed(64.0f);
             button_row_entry.overflow_scroll();
             button_row_entry.align_stretch();
             button_row_entry.justify_start();
 
-            auto increase_button_entry =
-                component.button(
-                    button_row_key,
-                    component.auto_local_key("counter_increase"),
-                    "Click me"
-                );
+            auto increase_button_entry = component.button(button_row_key, "Click me");
             increase_button_entry.on_click([component]() mutable {
                 component.state().update<int>("click_count", [](int& value) {
                     ++value;
@@ -137,11 +121,7 @@ int main()
             });
             increase_button_entry.height_fixed(56.0f);
 
-            auto reset_button_entry = component.button(
-                button_row_key,
-                component.auto_local_key("counter_reset"),
-                "Reset"
-            );
+            auto reset_button_entry = component.button(button_row_key, "Reset");
             reset_button_entry.on_click([component]() mutable {
                 component.state().set<int>("click_count", 0);
             });
@@ -151,11 +131,7 @@ int main()
             });
             reset_button_entry.height_fixed(56.0f);
 
-            auto info_button_entry = component.button(
-                button_row_key,
-                component.auto_local_key("counter_info"),
-                "More"
-            );
+            auto info_button_entry = component.button(button_row_key, "More");
             info_button_entry.width(guinevere::ui::ResponsiveProperty{
                 .compact = 192.0f,
                 .expanded = 240.0f
@@ -164,12 +140,10 @@ int main()
 
             component.label(
                 controls_panel_key,
-                component.auto_local_key("counter_text"),
                 "Button clicks: " + std::to_string(click_count)
             );
             component.label(
                 controls_panel_key,
-                component.auto_local_key("counter_hint"),
                 "Scroll mouse wheel over button row to pan horizontally"
             );
 
@@ -188,7 +162,7 @@ int main()
                 ).start;
                 const std::string deco_block_key = component.auto_local_key("deco_block");
                 const std::string deco_inner_key = component.auto_local_key("deco_inner");
-                auto deco_block_entry = component.panel(deco_block_key);
+                auto deco_block_entry = component.panel({}, deco_block_key);
                 deco_block_entry.layout(deco_block);
                 deco_block_entry.overflow_clip();
                 auto deco_inner_entry = component.panel(deco_block_key, deco_inner_key);

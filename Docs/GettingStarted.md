@@ -152,7 +152,8 @@ Guinevere does not bundle the whole font set into your `.exe` by default. Asset 
 - Control layout flow with `justify_*()` and `align_*()` (or `justify(...)` / `align(...)`).
 - Control overflow with `overflow_clip()`, `overflow_visible()`, `overflow_wrap()`, or `overflow_scroll()`.
 - Treat UI/state keys as key *segments* (for example `panel`, `increase`, `reset`) and avoid dots in local keys; `ComponentScope`/`StateStore::Scope` now validate this.
-- Prefer `ComponentScope::auto_local_key(...)` when possible to avoid typo-prone manual IDs. Use `salt` (for example loop index) when the same callsite emits multiple siblings.
+- `ComponentScope` now auto-generates node keys when a key argument is omitted (`label(parent, text)`, `button(parent, text)`, ...). Keep explicit keys for dynamic/reordered lists where identity must follow data IDs.
+- Use `ComponentScope::auto_local_key(...)` when you need explicit control (for example component mount keys or list identity).
 - Duplicate node keys in the same frame are rejected with an exception instead of being silently ignored.
 - For DRM component composition, prefer `mount_component(...)` / `mount_invoke(...)` with keys from `auto_local_key(...)` to avoid manual `mount(...)` + temporary `ComponentScope` boilerplate.
 - Persist UI/app state across frames with `StateStore` and `scope(...)`.

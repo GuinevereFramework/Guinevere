@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <source_location>
+#include <unordered_map>
 
 #include <guinevere/ui/frame_builder.hpp>
 
@@ -120,6 +121,18 @@ inline void validate_qualified_key(std::string_view key, std::string_view contex
     }
 
     return key_segment;
+}
+
+[[nodiscard]] inline std::uint64_t hash_source_location(
+    const std::source_location& location
+) noexcept
+{
+    std::uint64_t hash = 1469598103934665603ull;
+    hash = fnv1a_hash_text(hash, location.file_name());
+    hash = fnv1a_hash_text(hash, location.function_name());
+    hash = hash_append_u64(hash, static_cast<std::uint64_t>(location.line()));
+    hash = hash_append_u64(hash, static_cast<std::uint64_t>(location.column()));
+    return hash;
 }
 
 template<std::size_t N>
@@ -692,15 +705,28 @@ public:
         );
     }
 
-    FrameBuilder::Entry panel(std::string local_key)
+    FrameBuilder::Entry panel(
+        std::string local_parent_key,
+        const std::source_location& location = std::source_location::current()
+    )
     {
-        return panel({}, std::move(local_key));
+        return panel(
+            std::move(local_parent_key),
+            resolve_local_key_or_auto({}, "panel", location)
+        );
+    }
+
+    FrameBuilder::Entry panel(
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return panel({}, location);
     }
 
     template<detail::LocalKeyType LocalKey>
     FrameBuilder::Entry panel()
     {
-        return panel(std::string(LocalKey::value));
+        return panel({}, std::string(LocalKey::value));
     }
 
     FrameBuilder::Entry view(std::string local_parent_key, std::string local_key)
@@ -711,15 +737,28 @@ public:
         );
     }
 
-    FrameBuilder::Entry view(std::string local_key)
+    FrameBuilder::Entry view(
+        std::string local_parent_key,
+        const std::source_location& location = std::source_location::current()
+    )
     {
-        return view({}, std::move(local_key));
+        return view(
+            std::move(local_parent_key),
+            resolve_local_key_or_auto({}, "view", location)
+        );
+    }
+
+    FrameBuilder::Entry view(
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return view({}, location);
     }
 
     template<detail::LocalKeyType LocalKey>
     FrameBuilder::Entry view()
     {
-        return view(std::string(LocalKey::value));
+        return view({}, std::string(LocalKey::value));
     }
 
     FrameBuilder::Entry column(
@@ -754,25 +793,61 @@ public:
         );
     }
 
-    FrameBuilder::Entry column(std::string local_key, float gap = 6.0f, float padding = 8.0f)
+    FrameBuilder::Entry column(
+        std::string local_parent_key,
+        float gap = 6.0f,
+        float padding = 8.0f,
+        const std::source_location& location = std::source_location::current()
+    )
     {
-        return column({}, std::move(local_key), gap, padding);
+        return column(
+            std::move(local_parent_key),
+            resolve_local_key_or_auto({}, "column", location),
+            gap,
+            padding
+        );
+    }
+
+    FrameBuilder::Entry column(
+        float gap = 6.0f,
+        float padding = 8.0f,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return column({}, gap, padding, location);
     }
 
     template<detail::LocalKeyType LocalKey>
     FrameBuilder::Entry column(float gap = 6.0f, float padding = 8.0f)
     {
-        return column(std::string(LocalKey::value), gap, padding);
+        return column({}, std::string(LocalKey::value), gap, padding);
     }
 
     FrameBuilder::Entry column(
-        std::string local_key,
+        std::string local_parent_key,
         std::initializer_list<AxisTrack> tracks,
         float gap = 6.0f,
-        float padding = 8.0f
+        float padding = 8.0f,
+        const std::source_location& location = std::source_location::current()
     )
     {
-        return column({}, std::move(local_key), tracks, gap, padding);
+        return column(
+            std::move(local_parent_key),
+            resolve_local_key_or_auto({}, "column", location),
+            tracks,
+            gap,
+            padding
+        );
+    }
+
+    FrameBuilder::Entry column(
+        std::initializer_list<AxisTrack> tracks,
+        float gap = 6.0f,
+        float padding = 8.0f,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return column({}, tracks, gap, padding, location);
     }
 
     template<detail::LocalKeyType ParentKey, detail::LocalKeyType LocalKey>
@@ -818,25 +893,61 @@ public:
         );
     }
 
-    FrameBuilder::Entry row(std::string local_key, float gap = 6.0f, float padding = 8.0f)
+    FrameBuilder::Entry row(
+        std::string local_parent_key,
+        float gap = 6.0f,
+        float padding = 8.0f,
+        const std::source_location& location = std::source_location::current()
+    )
     {
-        return row({}, std::move(local_key), gap, padding);
+        return row(
+            std::move(local_parent_key),
+            resolve_local_key_or_auto({}, "row", location),
+            gap,
+            padding
+        );
+    }
+
+    FrameBuilder::Entry row(
+        float gap = 6.0f,
+        float padding = 8.0f,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return row({}, gap, padding, location);
     }
 
     template<detail::LocalKeyType LocalKey>
     FrameBuilder::Entry row(float gap = 6.0f, float padding = 8.0f)
     {
-        return row(std::string(LocalKey::value), gap, padding);
+        return row({}, std::string(LocalKey::value), gap, padding);
     }
 
     FrameBuilder::Entry row(
-        std::string local_key,
+        std::string local_parent_key,
         std::initializer_list<AxisTrack> tracks,
         float gap = 6.0f,
-        float padding = 8.0f
+        float padding = 8.0f,
+        const std::source_location& location = std::source_location::current()
     )
     {
-        return row({}, std::move(local_key), tracks, gap, padding);
+        return row(
+            std::move(local_parent_key),
+            resolve_local_key_or_auto({}, "row", location),
+            tracks,
+            gap,
+            padding
+        );
+    }
+
+    FrameBuilder::Entry row(
+        std::initializer_list<AxisTrack> tracks,
+        float gap = 6.0f,
+        float padding = 8.0f,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return row({}, tracks, gap, padding, location);
     }
 
     template<detail::LocalKeyType ParentKey, detail::LocalKeyType LocalKey>
@@ -863,15 +974,31 @@ public:
         );
     }
 
-    FrameBuilder::Entry label(std::string local_key, std::string text)
+    FrameBuilder::Entry label(
+        std::string local_parent_key,
+        std::string text,
+        const std::source_location& location = std::source_location::current()
+    )
     {
-        return label({}, std::move(local_key), std::move(text));
+        return label(
+            std::move(local_parent_key),
+            resolve_local_key_or_auto({}, "label", location),
+            std::move(text)
+        );
+    }
+
+    FrameBuilder::Entry label(
+        std::string text,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return label({}, std::move(text), location);
     }
 
     template<detail::LocalKeyType LocalKey>
     FrameBuilder::Entry label(std::string text)
     {
-        return label(std::string(LocalKey::value), std::move(text));
+        return label({}, std::string(LocalKey::value), std::move(text));
     }
 
     template<detail::LocalKeyType ParentKey, detail::LocalKeyType LocalKey>
@@ -897,9 +1024,25 @@ public:
         );
     }
 
-    FrameBuilder::Entry image(std::string local_key, std::string image_source)
+    FrameBuilder::Entry image(
+        std::string local_parent_key,
+        std::string image_source,
+        const std::source_location& location = std::source_location::current()
+    )
     {
-        return image({}, std::move(local_key), std::move(image_source));
+        return image(
+            std::move(local_parent_key),
+            resolve_local_key_or_auto({}, "image", location),
+            std::move(image_source)
+        );
+    }
+
+    FrameBuilder::Entry image(
+        std::string image_source,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return image({}, std::move(image_source), location);
     }
 
     FrameBuilder::Entry image_asset(
@@ -915,9 +1058,25 @@ public:
         );
     }
 
-    FrameBuilder::Entry image_asset(std::string local_key, std::string image_asset_id)
+    FrameBuilder::Entry image_asset(
+        std::string local_parent_key,
+        std::string image_asset_id,
+        const std::source_location& location = std::source_location::current()
+    )
     {
-        return image_asset({}, std::move(local_key), std::move(image_asset_id));
+        return image_asset(
+            std::move(local_parent_key),
+            resolve_local_key_or_auto({}, "image_asset", location),
+            std::move(image_asset_id)
+        );
+    }
+
+    FrameBuilder::Entry image_asset(
+        std::string image_asset_id,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return image_asset({}, std::move(image_asset_id), location);
     }
 
     FrameBuilder::Entry button(
@@ -933,15 +1092,31 @@ public:
         );
     }
 
-    FrameBuilder::Entry button(std::string local_key, std::string text)
+    FrameBuilder::Entry button(
+        std::string local_parent_key,
+        std::string text,
+        const std::source_location& location = std::source_location::current()
+    )
     {
-        return button({}, std::move(local_key), std::move(text));
+        return button(
+            std::move(local_parent_key),
+            resolve_local_key_or_auto({}, "button", location),
+            std::move(text)
+        );
+    }
+
+    FrameBuilder::Entry button(
+        std::string text,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return button({}, std::move(text), location);
     }
 
     template<detail::LocalKeyType LocalKey>
     FrameBuilder::Entry button(std::string text)
     {
-        return button(std::string(LocalKey::value), std::move(text));
+        return button({}, std::string(LocalKey::value), std::move(text));
     }
 
     template<detail::LocalKeyType ParentKey, detail::LocalKeyType LocalKey>
@@ -967,15 +1142,31 @@ public:
         );
     }
 
-    FrameBuilder::Entry text_edit(std::string local_key, std::string value_utf8)
+    FrameBuilder::Entry text_edit(
+        std::string local_parent_key,
+        std::string value_utf8,
+        const std::source_location& location = std::source_location::current()
+    )
     {
-        return text_edit({}, std::move(local_key), std::move(value_utf8));
+        return text_edit(
+            std::move(local_parent_key),
+            resolve_local_key_or_auto({}, "text_edit", location),
+            std::move(value_utf8)
+        );
+    }
+
+    FrameBuilder::Entry text_edit(
+        std::string value_utf8,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return text_edit({}, std::move(value_utf8), location);
     }
 
     template<detail::LocalKeyType LocalKey>
     FrameBuilder::Entry text_edit(std::string value_utf8)
     {
-        return text_edit(std::string(LocalKey::value), std::move(value_utf8));
+        return text_edit({}, std::string(LocalKey::value), std::move(value_utf8));
     }
 
     template<detail::LocalKeyType ParentKey, detail::LocalKeyType LocalKey>
@@ -996,17 +1187,47 @@ public:
         );
     }
 
-    FrameBuilder::Entry custom(std::string local_key)
+    FrameBuilder::Entry custom(
+        std::string local_parent_key,
+        const std::source_location& location = std::source_location::current()
+    )
     {
-        return custom({}, std::move(local_key));
+        return custom(
+            std::move(local_parent_key),
+            resolve_local_key_or_auto({}, "custom", location)
+        );
+    }
+
+    FrameBuilder::Entry custom(
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return custom({}, location);
     }
 
 private:
+    [[nodiscard]] std::string resolve_local_key_or_auto(
+        std::string local_key,
+        std::string_view auto_key_prefix,
+        const std::source_location& location
+    )
+    {
+        if(!local_key.empty()) {
+            detail::validate_key_segment(local_key, "ComponentScope local_key");
+            return std::move(local_key);
+        }
+
+        const std::uint64_t location_hash = detail::hash_source_location(location);
+        std::size_t& next_salt = auto_key_salts_by_location_[location_hash];
+        return auto_local_key(auto_key_prefix, next_salt++, location);
+    }
+
     FrameBuilder* frame_builder_ = nullptr;
     StateStore* state_store_ = nullptr;
     StateStore::Scope state_scope_;
     std::string mount_parent_key_;
     std::string component_key_prefix_;
+    std::unordered_map<std::uint64_t, std::size_t> auto_key_salts_by_location_{};
 };
 
 } // namespace guinevere::ui
