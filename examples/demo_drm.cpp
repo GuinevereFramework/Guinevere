@@ -22,8 +22,6 @@ public:
         panel_entry.column(10.0f, 14.0f);
         panel_entry.align_center();
         panel_entry.justify_start();
-        panel_entry.width_fill();
-        panel_entry.height_fill();
         panel_entry.min_width(220.0f);
         component.label(panel_key, title_);
 
@@ -33,21 +31,11 @@ public:
                 ++value;
             });
         });
-        increase_button_entry.width(guinevere::ui::ResponsiveProperty{
-            .compact = 160.0f,
-            .expanded = 210.0f
-        });
-        increase_button_entry.height_fixed(56.0f);
 
         auto reset_button_entry = component.button(panel_key, "Reset");
         reset_button_entry.on_click([component]() mutable {
             component.state().set<int>("click_count", 0);
         });
-        reset_button_entry.width(guinevere::ui::ResponsiveProperty{
-            .compact = 160.0f,
-            .expanded = 210.0f
-        });
-        reset_button_entry.height_fixed(56.0f);
         component.label(panel_key, "Count: " + std::to_string(click_count));
     }
 
@@ -72,14 +60,10 @@ public:
         panel_entry.column(12.0f, 14.0f);
         panel_entry.align_stretch();
         panel_entry.justify_start();
-        panel_entry.width_fill();
-        panel_entry.height_fill();
         panel_entry.min_height(172.0f);
         component.label(panel_key, "Text Input Component");
         auto text_edit_entry = component.text_edit(panel_key, text_value_utf8);
         text_edit_entry.allow_caret_toggle();
-        text_edit_entry.height_fixed(56.0f);
-        text_edit_entry.width_fill();
         text_edit_entry.on_text_change([component](const std::string& changed_value_utf8) mutable {
             component.state().set<std::string>("text_value_utf8", changed_value_utf8);
         });
@@ -103,7 +87,6 @@ void render_hint_component(guinevere::ui::ComponentScope& component)
     panel_entry.column(10.0f, 12.0f);
     panel_entry.align_stretch();
     panel_entry.justify_start();
-    panel_entry.width_fill();
 
     auto toggle_button_entry =
         component.button(panel_key, expanded ? "Hide component tips" : "Show component tips");
@@ -111,11 +94,6 @@ void render_hint_component(guinevere::ui::ComponentScope& component)
         component.state().update<bool>("expanded", [](bool& value) {
             value = !value;
         });
-    });
-    toggle_button_entry.height_fixed(56.0f);
-    toggle_button_entry.width(guinevere::ui::ResponsiveProperty{
-        .compact = 220.0f,
-        .expanded = 280.0f
     });
     component.label(
         panel_key,
@@ -149,10 +127,8 @@ int main()
                                   guinevere::ui::ComponentScope& app_component,
                                   const guinevere::ui::AppScaffoldResult& scaffold
                               ) -> bool {
-            const guinevere::gfx::Rect layout_bounds = scaffold.body;
-
             const float min_detail_height = 260.0f;
-            const float footer_height = 36.0f;
+            const float footer_height = 34.0f;
             const float row_gap = 16.0f;
             const float preferred_counter_row_height = guinevere::ui::resolve_responsive_scalar(
                 scaffold.app_layout.breakpoint,
@@ -161,20 +137,20 @@ int main()
             const std::string footer_text =
                 "Each component keeps local state and local node keys. Breakpoint: "
                 + std::string(guinevere::ui::app_breakpoint_label(scaffold.app_layout.breakpoint));
-            const guinevere::gfx::Rect title_rect = guinevere::ui::inset_rect(
-                scaffold.header,
-                guinevere::ui::EdgeInsets{20.0f, 0.0f, 0.0f, 0.0f}
-            );
 
+            const std::string header_key = app_component.auto_local_key("header");
             const std::string layout_root_key = app_component.auto_local_key("layout_root");
             const std::string counter_row_key = app_component.auto_local_key("counter_row");
             const std::string detail_column_key = app_component.auto_local_key("detail_column");
 
-            auto title_entry = app_component.label("Guinevere DRM Component Demo");
-            title_entry.layout(title_rect);
+            auto header_entry = app_component.column({}, header_key, 0.0f, 0.0f);
+            header_entry.layout(scaffold.header);
+            header_entry.align_start();
+            header_entry.justify_start();
+            (void)app_component.label(header_key, "Guinevere DRM Component Demo");
 
             auto layout_root_entry = app_component.panel({}, layout_root_key);
-            layout_root_entry.layout(layout_bounds);
+            layout_root_entry.layout(scaffold.body);
             layout_root_entry.column(row_gap, 18.0f);
             layout_root_entry.main_axis_tracks({
                 guinevere::ui::Flex(0.0f).min(156.0f).pref(preferred_counter_row_height).priority(1),
@@ -187,10 +163,13 @@ int main()
             auto counter_row_entry = app_component.row(layout_root_key, counter_row_key, row_gap, 0.0f);
             counter_row_entry.align_stretch();
             counter_row_entry.justify_start();
+            counter_row_entry.main_axis_tracks({
+                guinevere::ui::Flex(1.0f).min(220.0f).pref(280.0f),
+                guinevere::ui::Flex(1.0f).min(220.0f).pref(280.0f)
+            });
 
             auto detail_column_entry =
                 app_component.column(layout_root_key, detail_column_key, 12.0f, 0.0f);
-            detail_column_entry.height_fill();
             detail_column_entry.align_stretch();
             detail_column_entry.justify_start();
 

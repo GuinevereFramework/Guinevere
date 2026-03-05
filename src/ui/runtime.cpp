@@ -183,7 +183,7 @@ bool UiRuntime::end_frame(
 )
 {
     Reconciler::reconcile(tree_, root_key_, frame_);
-    pipeline_.layout(tree_, viewport);
+    pipeline_.layout(tree_, viewport, renderer);
 
     bool has_scroll_update = false;
     const std::size_t node_count = tree_.nodes().size();
@@ -194,7 +194,7 @@ bool UiRuntime::end_frame(
         }
     }
     if(has_scroll_update) {
-        pipeline_.layout(tree_, viewport);
+        pipeline_.layout(tree_, viewport, renderer);
     }
 
     const bool has_interaction = interactions_.update_frame(tree_, frame_, renderer);

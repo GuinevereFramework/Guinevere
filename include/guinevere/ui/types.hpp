@@ -43,6 +43,7 @@ enum class LayoutDirection {
     None,
     Column,
     Row,
+    Grid,
 };
 
 enum class SizeMode {
@@ -139,6 +140,9 @@ struct LayoutConfig {
     float fixed_width = 0.0f;
     float fixed_height = 0.0f;
     std::vector<AxisTrackConstraint> main_axis_tracks{};
+    std::vector<AxisTrackConstraint> grid_columns{};
+    std::vector<AxisTrackConstraint> grid_rows{};
+    std::size_t grid_auto_columns = 1U;
 };
 
 struct AxisTrack {

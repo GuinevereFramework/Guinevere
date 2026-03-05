@@ -89,19 +89,32 @@ struct NodeSnapshot {
 
 [[nodiscard]] bool layout_config_equal(const LayoutConfig& lhs, const LayoutConfig& rhs) noexcept
 {
-    if(lhs.main_axis_tracks.size() != rhs.main_axis_tracks.size()) {
-        return false;
-    }
-    for(std::size_t i = 0U; i < lhs.main_axis_tracks.size(); ++i) {
-        const auto& lhs_track = lhs.main_axis_tracks[i];
-        const auto& rhs_track = rhs.main_axis_tracks[i];
-        if(lhs_track.min_size != rhs_track.min_size
-            || lhs_track.preferred_size != rhs_track.preferred_size
-            || lhs_track.max_size != rhs_track.max_size
-            || lhs_track.grow_weight != rhs_track.grow_weight
-            || lhs_track.shrink_priority != rhs_track.shrink_priority) {
+    const auto tracks_equal = [](
+                                  const std::vector<LayoutConfig::AxisTrackConstraint>& lhs_tracks,
+                                  const std::vector<LayoutConfig::AxisTrackConstraint>& rhs_tracks
+                              ) noexcept {
+        if(lhs_tracks.size() != rhs_tracks.size()) {
             return false;
         }
+
+        for(std::size_t i = 0U; i < lhs_tracks.size(); ++i) {
+            const auto& lhs_track = lhs_tracks[i];
+            const auto& rhs_track = rhs_tracks[i];
+            if(lhs_track.min_size != rhs_track.min_size
+                || lhs_track.preferred_size != rhs_track.preferred_size
+                || lhs_track.max_size != rhs_track.max_size
+                || lhs_track.grow_weight != rhs_track.grow_weight
+                || lhs_track.shrink_priority != rhs_track.shrink_priority) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    if(!tracks_equal(lhs.main_axis_tracks, rhs.main_axis_tracks)
+        || !tracks_equal(lhs.grid_columns, rhs.grid_columns)
+        || !tracks_equal(lhs.grid_rows, rhs.grid_rows)) {
+        return false;
     }
 
     return lhs.direction == rhs.direction
@@ -119,7 +132,8 @@ struct NodeSnapshot {
         && lhs.min_height == rhs.min_height
         && lhs.max_height == rhs.max_height
         && lhs.fixed_width == rhs.fixed_width
-        && lhs.fixed_height == rhs.fixed_height;
+        && lhs.fixed_height == rhs.fixed_height
+        && lhs.grid_auto_columns == rhs.grid_auto_columns;
 }
 
 [[nodiscard]] bool node_props_equal(const NodeProps& lhs, const NodeProps& rhs) noexcept

@@ -61,82 +61,100 @@ int main()
             );
             const bool show_visual_column =
                 scaffold.app_layout.breakpoint != guinevere::ui::AppBreakpoint::Compact;
-            guinevere::gfx::Rect controls_panel_rect = scaffold.body;
-            guinevere::gfx::Rect visual_column_rect{};
-            if(show_visual_column) {
-                const guinevere::ui::RectSplit body_columns = guinevere::ui::split_row_ratio_end(
-                    scaffold.body,
-                    0.34f,
-                    body_gap,
-                    220.0f,
-                    360.0f
-                );
-                controls_panel_rect = body_columns.start;
-                visual_column_rect = body_columns.end;
-            }
-            const float hero_height = guinevere::ui::resolve_axis_size(
-                visual_column_rect.h * 0.52f,
-                150.0f,
-                240.0f
-            );
-            const guinevere::gfx::Rect hero_rect =
-                guinevere::ui::split_column_start(visual_column_rect, hero_height).start;
             const std::string subtitle_text =
                 "Framework-connected reusable buttons (DRM) - "
                 + std::string(guinevere::ui::app_breakpoint_label(scaffold.app_layout.breakpoint));
-            const guinevere::ui::RectSplit header_lines =
-                guinevere::ui::split_column_start(scaffold.header, 34.0f, 2.0f);
+            const std::string header_key = component.auto_local_key("header");
+            const std::string body_root_key = component.auto_local_key("body_root");
+            const std::string body_content_key = component.auto_local_key("body_content");
             const std::string controls_panel_key = component.auto_local_key("controls_panel");
-            const std::string button_row_key = component.auto_local_key("button_row");
+            const std::string button_grid_key = component.auto_local_key("button_grid");
+            const std::string visual_column_key = component.auto_local_key("visual_column");
+            const std::string deco_block_key = component.auto_local_key("deco_block");
+            const std::string deco_inner_key = component.auto_local_key("deco_inner");
 
-            auto title_entry = component.label("Guinevere Demo Window");
-            title_entry.layout(header_lines.start);
-            auto subtitle_entry = component.label(subtitle_text);
-            subtitle_entry.layout(header_lines.end);
+            auto header_entry = component.column({}, header_key, 2.0f, 0.0f);
+            header_entry.layout(scaffold.header);
+            header_entry.align_start();
+            header_entry.justify_start();
+            (void)component.label(header_key, "Guinevere Demo Window");
+            (void)component.label(header_key, subtitle_text);
+
+            auto body_root_entry = component.panel({}, body_root_key);
+            body_root_entry.layout(scaffold.body);
+            body_root_entry.column(0.0f, 0.0f);
+            body_root_entry.align_stretch();
+            body_root_entry.justify_start();
+
+            std::string controls_parent_key = body_root_key;
             if(show_visual_column) {
-                auto hero_entry = component.image_asset("demo_hero");
-                hero_entry.layout(hero_rect);
+                auto body_content_entry = component.row(body_root_key, body_content_key, body_gap, 0.0f);
+                body_content_entry.align_stretch();
+                body_content_entry.justify_start();
+                body_content_entry.main_axis_tracks({
+                    guinevere::ui::Flex(1.0f).min(300.0f).pref(460.0f),
+                    guinevere::ui::Fixed(320.0f)
+                });
+                controls_parent_key = body_content_key;
+
+                auto visual_column_entry =
+                    component.column(body_content_key, visual_column_key, 20.0f, 0.0f);
+                visual_column_entry.align_stretch();
+                visual_column_entry.justify_start();
+
+                auto hero_entry = component.image_asset(visual_column_key, "demo_hero");
+                hero_entry.height(guinevere::ui::ResponsiveProperty{
+                    .medium = 180.0f,
+                    .expanded = 220.0f
+                });
+
+                auto deco_block_entry = component.panel(visual_column_key, deco_block_key);
+                deco_block_entry.column(0.0f, 0.0f);
+                deco_block_entry.overflow_clip();
+                deco_block_entry.min_height(120.0f);
+
+                auto deco_inner_entry = component.panel(deco_block_key, deco_inner_key);
+                deco_inner_entry.height_fill();
+                deco_inner_entry.min_width(180.0f);
+                deco_inner_entry.min_height(90.0f);
             }
-            auto controls_panel_entry = component.panel({}, controls_panel_key);
-            controls_panel_entry.layout(controls_panel_rect);
+
+            auto controls_panel_entry = component.panel(controls_parent_key, controls_panel_key);
             controls_panel_entry.column(14.0f, 18.0f);
             controls_panel_entry.align_stretch();
             controls_panel_entry.justify_start();
             component.label(controls_panel_key, "Controls Panel (Auto Layout)");
-            auto button_row_entry = component.row(controls_panel_key, button_row_key, 20.0f, 0.0f);
-            button_row_entry.height_fixed(64.0f);
-            button_row_entry.overflow_scroll();
-            button_row_entry.align_stretch();
-            button_row_entry.justify_start();
 
-            auto increase_button_entry = component.button(button_row_key, "Click me");
+            auto button_grid_entry = component.grid(
+                controls_panel_key,
+                button_grid_key,
+                show_visual_column ? 3U : 1U,
+                12.0f,
+                0.0f
+            );
+            button_grid_entry.align_stretch();
+            button_grid_entry.justify_start();
+            if(show_visual_column) {
+                button_grid_entry.grid_columns({
+                    guinevere::ui::Flex(1.0f).min(140.0f).pref(160.0f),
+                    guinevere::ui::Flex(1.0f).min(140.0f).pref(160.0f),
+                    guinevere::ui::Flex(1.0f).min(140.0f).pref(160.0f)
+                });
+            }
+
+            auto increase_button_entry = component.button(button_grid_key, "Click me");
             increase_button_entry.on_click([component]() mutable {
                 component.state().update<int>("click_count", [](int& value) {
                     ++value;
                 });
             });
-            increase_button_entry.width(guinevere::ui::ResponsiveProperty{
-                .compact = 192.0f,
-                .expanded = 240.0f
-            });
-            increase_button_entry.height_fixed(56.0f);
 
-            auto reset_button_entry = component.button(button_row_key, "Reset");
+            auto reset_button_entry = component.button(button_grid_key, "Reset");
             reset_button_entry.on_click([component]() mutable {
                 component.state().set<int>("click_count", 0);
             });
-            reset_button_entry.width(guinevere::ui::ResponsiveProperty{
-                .compact = 192.0f,
-                .expanded = 240.0f
-            });
-            reset_button_entry.height_fixed(56.0f);
 
-            auto info_button_entry = component.button(button_row_key, "More");
-            info_button_entry.width(guinevere::ui::ResponsiveProperty{
-                .compact = 192.0f,
-                .expanded = 240.0f
-            });
-            info_button_entry.height_fixed(56.0f);
+            (void)component.button(button_grid_key, "More");
 
             component.label(
                 controls_panel_key,
@@ -144,35 +162,8 @@ int main()
             );
             component.label(
                 controls_panel_key,
-                "Scroll mouse wheel over button row to pan horizontally"
+                "Auto grid + intrinsic button sizing (no manual split rectangles)"
             );
-
-            if(show_visual_column) {
-                const guinevere::ui::RectSplit after_hero =
-                    guinevere::ui::split_column_start(visual_column_rect, hero_rect.h, 20.0f);
-                const guinevere::gfx::Rect deco_space = after_hero.end;
-                const float deco_w = std::min(deco_space.w, 320.0f);
-                const float deco_h = std::min(
-                    std::max(120.0f, deco_space.h - 8.0f),
-                    180.0f
-                );
-                const guinevere::gfx::Rect deco_block = guinevere::ui::split_column_start(
-                    guinevere::ui::split_row_start(deco_space, deco_w).start,
-                    deco_h
-                ).start;
-                const std::string deco_block_key = component.auto_local_key("deco_block");
-                const std::string deco_inner_key = component.auto_local_key("deco_inner");
-                auto deco_block_entry = component.panel({}, deco_block_key);
-                deco_block_entry.layout(deco_block);
-                deco_block_entry.overflow_clip();
-                auto deco_inner_entry = component.panel(deco_block_key, deco_inner_key);
-                deco_inner_entry.layout(guinevere::gfx::Rect{
-                    deco_block.x - 40.0f,
-                    deco_block.y - 10.0f,
-                    deco_block.w + 80.0f,
-                    deco_block.h + 40.0f
-                });
-            }
             return true;
     };
 

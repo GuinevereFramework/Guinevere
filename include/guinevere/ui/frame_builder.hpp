@@ -117,6 +117,9 @@ public:
             node().node.layout_config.direction = LayoutDirection::Column;
             node().node.layout_config.gap = gap;
             node().node.layout_config.padding = padding;
+            node().node.layout_config.grid_columns.clear();
+            node().node.layout_config.grid_rows.clear();
+            node().node.layout_config.grid_auto_columns = 1U;
         }
 
         void column(
@@ -134,6 +137,9 @@ public:
             node().node.layout_config.direction = LayoutDirection::Row;
             node().node.layout_config.gap = gap;
             node().node.layout_config.padding = padding;
+            node().node.layout_config.grid_columns.clear();
+            node().node.layout_config.grid_rows.clear();
+            node().node.layout_config.grid_auto_columns = 1U;
         }
 
         void row(
@@ -174,6 +180,60 @@ public:
         void clear_main_axis_tracks()
         {
             node().node.layout_config.main_axis_tracks.clear();
+        }
+
+        void grid(std::size_t auto_columns = 1U, float gap = 6.0f, float padding = 8.0f)
+        {
+            node().node.layout_config.direction = LayoutDirection::Grid;
+            node().node.layout_config.gap = gap;
+            node().node.layout_config.padding = padding;
+            node().node.layout_config.main_axis_tracks.clear();
+            node().node.layout_config.grid_columns.clear();
+            node().node.layout_config.grid_rows.clear();
+            node().node.layout_config.grid_auto_columns = auto_columns > 0U ? auto_columns : 1U;
+        }
+
+        void grid(
+            std::initializer_list<AxisTrack> columns,
+            float gap = 6.0f,
+            float padding = 8.0f
+        )
+        {
+            grid(columns.size(), gap, padding);
+            grid_columns(std::move(columns));
+        }
+
+        void grid_columns(std::vector<LayoutConfig::AxisTrackConstraint> tracks)
+        {
+            node().node.layout_config.grid_columns = std::move(tracks);
+            if(!node().node.layout_config.grid_columns.empty()) {
+                node().node.layout_config.grid_auto_columns = node().node.layout_config.grid_columns.size();
+            }
+        }
+
+        void grid_columns(std::initializer_list<AxisTrack> tracks)
+        {
+            node().node.layout_config.grid_columns = axis_tracks(tracks);
+            if(!node().node.layout_config.grid_columns.empty()) {
+                node().node.layout_config.grid_auto_columns = node().node.layout_config.grid_columns.size();
+            }
+        }
+
+        void grid_rows(std::vector<LayoutConfig::AxisTrackConstraint> tracks)
+        {
+            node().node.layout_config.grid_rows = std::move(tracks);
+        }
+
+        void grid_rows(std::initializer_list<AxisTrack> tracks)
+        {
+            node().node.layout_config.grid_rows = axis_tracks(tracks);
+        }
+
+        void clear_grid_tracks()
+        {
+            node().node.layout_config.grid_columns.clear();
+            node().node.layout_config.grid_rows.clear();
+            node().node.layout_config.grid_auto_columns = 1U;
         }
 
         void overflow_clip()
@@ -298,6 +358,31 @@ public:
         {
             node().node.layout_config.width_mode = SizeMode::Auto;
             node().node.layout_config.height_mode = SizeMode::Auto;
+        }
+
+        void width_auto()
+        {
+            node().node.layout_config.width_mode = SizeMode::Auto;
+        }
+
+        void height_auto()
+        {
+            node().node.layout_config.height_mode = SizeMode::Auto;
+        }
+
+        void width_intrinsic()
+        {
+            width_auto();
+        }
+
+        void height_intrinsic()
+        {
+            height_auto();
+        }
+
+        void size_intrinsic()
+        {
+            size_auto();
         }
 
         void min_width(float value)
@@ -437,6 +522,32 @@ public:
     {
         Entry entry = view(std::move(parent_key), std::move(key));
         entry.row(std::move(tracks), gap, padding);
+        return entry;
+    }
+
+    Entry grid(
+        std::string parent_key,
+        std::string key,
+        std::size_t auto_columns = 1U,
+        float gap = 6.0f,
+        float padding = 8.0f
+    )
+    {
+        Entry entry = view(std::move(parent_key), std::move(key));
+        entry.grid(auto_columns, gap, padding);
+        return entry;
+    }
+
+    Entry grid(
+        std::string parent_key,
+        std::string key,
+        std::initializer_list<AxisTrack> columns,
+        float gap = 6.0f,
+        float padding = 8.0f
+    )
+    {
+        Entry entry = view(std::move(parent_key), std::move(key));
+        entry.grid(std::move(columns), gap, padding);
         return entry;
     }
 

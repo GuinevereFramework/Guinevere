@@ -26,6 +26,43 @@ namespace {
         && approx(rect.h, h);
 }
 
+class TestMeasureRenderer final : public guinevere::gfx::Renderer {
+public:
+    void clear(guinevere::gfx::Color) override
+    {
+    }
+    void fill_rect(guinevere::gfx::Rect, guinevere::gfx::Color) override
+    {
+    }
+    void stroke_rect(guinevere::gfx::Rect, guinevere::gfx::Color, float) override
+    {
+    }
+    void push_clip(guinevere::gfx::Rect) override
+    {
+    }
+    void pop_clip() override
+    {
+    }
+    bool set_font(std::string_view, int) override
+    {
+        return true;
+    }
+    void draw_text(float, float, std::string_view, guinevere::gfx::Color) override
+    {
+    }
+    bool draw_image(guinevere::gfx::Rect, std::string_view, guinevere::gfx::Color) override
+    {
+        return true;
+    }
+    float measure_text(std::string_view text) override
+    {
+        return static_cast<float>(text.size()) * 10.0f;
+    }
+    void present() override
+    {
+    }
+};
+
 } // namespace
 
 int main()
@@ -172,6 +209,38 @@ int main()
     if(layout_config.height_mode != guinevere::ui::SizeMode::Fixed
         || !approx(layout_config.fixed_height, 80.0f)) {
         return 1;
+    }
+
+    {
+        std::vector<ReconciledNode> grid_frame;
+        FrameBuilder grid_builder(grid_frame);
+        auto grid_entry = grid_builder.grid(
+            "root",
+            "grid_root",
+            {
+                Flex(1.0f).min(100.0f).pref(140.0f),
+                Fixed(160.0f)
+            },
+            10.0f,
+            12.0f
+        );
+        grid_entry.grid_rows({
+            Fixed(44.0f),
+            Flex(1.0f).min(80.0f).pref(120.0f)
+        });
+        if(grid_frame.empty()) {
+            return 1;
+        }
+
+        const auto& grid_config = grid_frame.front().node.layout_config;
+        if(grid_config.direction != guinevere::ui::LayoutDirection::Grid) {
+            return 1;
+        }
+        if(grid_config.grid_auto_columns != 2U
+            || grid_config.grid_columns.size() != 2U
+            || grid_config.grid_rows.size() != 2U) {
+            return 1;
+        }
     }
 
     {
@@ -345,6 +414,66 @@ int main()
         if(!approx(track_a->layout.y, 20.0f)
             || !approx(track_b->layout.y, 130.0f)
             || !approx(track_c->layout.y, 340.0f)) {
+            return 1;
+        }
+    }
+
+    {
+        guinevere::ui::UiTree tree;
+        guinevere::ui::Pipeline pipeline;
+        std::vector<ReconciledNode> intrinsic_frame;
+        FrameBuilder intrinsic_builder(intrinsic_frame);
+
+        auto root_panel = intrinsic_builder.panel("root", "intrinsic_root");
+        root_panel.layout(Rect{0.0f, 0.0f, 340.0f, 220.0f});
+        root_panel.column(8.0f, 10.0f);
+        root_panel.align_start();
+        (void)intrinsic_builder.button("intrinsic_root", "action", "1234567890");
+
+        guinevere::ui::Reconciler::reconcile(tree, "root", intrinsic_frame);
+        TestMeasureRenderer renderer;
+        pipeline.layout(tree, Rect{0.0f, 0.0f, 340.0f, 220.0f}, renderer);
+
+        const guinevere::ui::UiNode* action = tree.get(tree.find("action"));
+        if(action == nullptr) {
+            return 1;
+        }
+        if(!approx(action->layout.w, 132.0f) || !approx(action->layout.h, 56.0f)) {
+            return 1;
+        }
+    }
+
+    {
+        guinevere::ui::UiTree tree;
+        guinevere::ui::Pipeline pipeline;
+        std::vector<ReconciledNode> grid_frame;
+        FrameBuilder grid_builder(grid_frame);
+
+        auto root_panel = grid_builder.panel("root", "grid_layout_root");
+        root_panel.layout(Rect{0.0f, 0.0f, 420.0f, 220.0f});
+        root_panel.grid(2U, 10.0f, 10.0f);
+        root_panel.align_stretch();
+        (void)grid_builder.button("grid_layout_root", "grid_a", "A");
+        (void)grid_builder.button("grid_layout_root", "grid_b", "B");
+        (void)grid_builder.button("grid_layout_root", "grid_c", "C");
+
+        guinevere::ui::Reconciler::reconcile(tree, "root", grid_frame);
+        pipeline.layout(tree, Rect{0.0f, 0.0f, 420.0f, 220.0f});
+
+        const guinevere::ui::UiNode* grid_a = tree.get(tree.find("grid_a"));
+        const guinevere::ui::UiNode* grid_b = tree.get(tree.find("grid_b"));
+        const guinevere::ui::UiNode* grid_c = tree.get(tree.find("grid_c"));
+        if(grid_a == nullptr || grid_b == nullptr || grid_c == nullptr) {
+            return 1;
+        }
+
+        if(!rect_eq(grid_a->layout, 10.0f, 10.0f, 195.0f, 56.0f)) {
+            return 1;
+        }
+        if(!rect_eq(grid_b->layout, 215.0f, 10.0f, 195.0f, 56.0f)) {
+            return 1;
+        }
+        if(!rect_eq(grid_c->layout, 10.0f, 76.0f, 195.0f, 56.0f)) {
             return 1;
         }
     }

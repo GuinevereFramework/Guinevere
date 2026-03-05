@@ -961,6 +961,120 @@ public:
         );
     }
 
+    FrameBuilder::Entry grid(
+        std::string local_parent_key,
+        std::string local_key,
+        std::size_t auto_columns = 1U,
+        float gap = 6.0f,
+        float padding = 8.0f
+    )
+    {
+        return frame_builder_->grid(
+            parent_key(local_parent_key),
+            node_key(local_key),
+            auto_columns,
+            gap,
+            padding
+        );
+    }
+
+    FrameBuilder::Entry grid(
+        std::string local_parent_key,
+        std::string local_key,
+        std::initializer_list<AxisTrack> columns,
+        float gap = 6.0f,
+        float padding = 8.0f
+    )
+    {
+        return frame_builder_->grid(
+            parent_key(local_parent_key),
+            node_key(local_key),
+            columns,
+            gap,
+            padding
+        );
+    }
+
+    FrameBuilder::Entry grid(
+        std::string local_parent_key,
+        std::size_t auto_columns = 1U,
+        float gap = 6.0f,
+        float padding = 8.0f,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return grid(
+            std::move(local_parent_key),
+            resolve_local_key_or_auto({}, "grid", location),
+            auto_columns,
+            gap,
+            padding
+        );
+    }
+
+    FrameBuilder::Entry grid(
+        std::size_t auto_columns = 1U,
+        float gap = 6.0f,
+        float padding = 8.0f,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return grid({}, auto_columns, gap, padding, location);
+    }
+
+    template<detail::LocalKeyType LocalKey>
+    FrameBuilder::Entry grid(
+        std::size_t auto_columns = 1U,
+        float gap = 6.0f,
+        float padding = 8.0f
+    )
+    {
+        return grid({}, std::string(LocalKey::value), auto_columns, gap, padding);
+    }
+
+    FrameBuilder::Entry grid(
+        std::string local_parent_key,
+        std::initializer_list<AxisTrack> columns,
+        float gap = 6.0f,
+        float padding = 8.0f,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return grid(
+            std::move(local_parent_key),
+            resolve_local_key_or_auto({}, "grid", location),
+            columns,
+            gap,
+            padding
+        );
+    }
+
+    FrameBuilder::Entry grid(
+        std::initializer_list<AxisTrack> columns,
+        float gap = 6.0f,
+        float padding = 8.0f,
+        const std::source_location& location = std::source_location::current()
+    )
+    {
+        return grid({}, columns, gap, padding, location);
+    }
+
+    template<detail::LocalKeyType ParentKey, detail::LocalKeyType LocalKey>
+    FrameBuilder::Entry grid(
+        std::size_t auto_columns = 1U,
+        float gap = 6.0f,
+        float padding = 8.0f
+    )
+    {
+        return grid(
+            std::string(ParentKey::value),
+            std::string(LocalKey::value),
+            auto_columns,
+            gap,
+            padding
+        );
+    }
+
     FrameBuilder::Entry label(
         std::string local_parent_key,
         std::string local_key,

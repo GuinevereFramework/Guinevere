@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <numeric>
 
 #include <guinevere/asset/asset_manager.hpp>
 #include <guinevere/ui/runtime.hpp>
@@ -66,7 +67,7 @@ void assign_layout(UiTree& tree, std::size_t node_index, gfx::Rect layout)
     tree.invalidate(rect_union(old_layout, layout));
 }
 
-[[nodiscard]] float default_height(NodeKind kind)
+[[nodiscard]] float intrinsic_height(NodeKind kind)
 {
     switch(kind) {
     case NodeKind::Root:
@@ -90,12 +91,44 @@ void assign_layout(UiTree& tree, std::size_t node_index, gfx::Rect layout)
     return 48.0f;
 }
 
-[[nodiscard]] float default_width(NodeKind kind, float available_width)
+[[nodiscard]] bool is_utf8_continuation_byte(unsigned char byte)
 {
-    switch(kind) {
+    return (byte & 0xC0u) == 0x80u;
+}
+
+[[nodiscard]] std::size_t count_utf8_codepoints(std::string_view text)
+{
+    std::size_t count = 0U;
+    for(std::size_t i = 0U; i < text.size();) {
+        ++count;
+        ++i;
+        while(i < text.size()
+            && is_utf8_continuation_byte(static_cast<unsigned char>(text[i]))) {
+            ++i;
+        }
+    }
+    return count;
+}
+
+[[nodiscard]] float measure_text_width(std::string_view text, gfx::Renderer* renderer)
+{
+    if(renderer != nullptr) {
+        return std::max(0.0f, renderer->measure_text(text));
+    }
+
+    constexpr float approx_glyph_width = 9.0f;
+    return static_cast<float>(count_utf8_codepoints(text)) * approx_glyph_width;
+}
+
+[[nodiscard]] float intrinsic_width(const UiNode& child, float available_width, gfx::Renderer* renderer)
+{
+    switch(child.kind) {
     case NodeKind::Button:
+        return std::max(112.0f, measure_text_width(child.props.text, renderer) + 32.0f);
     case NodeKind::TextEdit:
+        return std::max(180.0f, measure_text_width(child.props.text, renderer) + 28.0f);
     case NodeKind::Label:
+        return std::max(24.0f, measure_text_width(child.props.text, renderer));
     case NodeKind::Panel:
     case NodeKind::View:
     case NodeKind::Image:
@@ -143,7 +176,8 @@ void assign_layout(UiTree& tree, std::size_t node_index, gfx::Rect layout)
 [[nodiscard]] float resolve_width(
     const UiNode& child,
     float available_width,
-    float distributed_fill_width
+    float distributed_fill_width,
+    gfx::Renderer* renderer
 )
 {
     switch(child.layout_config.width_mode) {
@@ -152,7 +186,10 @@ void assign_layout(UiTree& tree, std::size_t node_index, gfx::Rect layout)
     case SizeMode::Fill:
         return clamp_width_to_constraints(child, distributed_fill_width);
     case SizeMode::Auto:
-        return clamp_width_to_constraints(child, default_width(child.kind, available_width));
+        return clamp_width_to_constraints(
+            child,
+            intrinsic_width(child, available_width, renderer)
+        );
     }
 
     return clamp_width_to_constraints(child, available_width);
@@ -170,21 +207,13 @@ void assign_layout(UiTree& tree, std::size_t node_index, gfx::Rect layout)
     case SizeMode::Fill:
         return clamp_height_to_constraints(child, distributed_fill_height);
     case SizeMode::Auto:
-        if(child.layout.h > 0.0f) {
-            return clamp_height_to_constraints(child, child.layout.h);
-        }
         return clamp_height_to_constraints(
             child,
-            std::min(default_height(child.kind), available_height)
+            std::min(intrinsic_height(child.kind), available_height)
         );
     }
 
     return clamp_height_to_constraints(child, available_height);
-}
-
-[[nodiscard]] bool is_utf8_continuation_byte(unsigned char byte)
-{
-    return (byte & 0xC0u) == 0x80u;
 }
 
 [[nodiscard]] std::size_t clamp_utf8_cursor(std::string_view text, std::size_t cursor)
@@ -222,6 +251,26 @@ struct ComputedSize {
         return remain;
     case AlignItems::Stretch:
         return 0.0f;
+    }
+
+    return 0.0f;
+}
+
+[[nodiscard]] float apply_justify_offset(
+    JustifyContent justify,
+    float container_size,
+    float item_size
+)
+{
+    const float remain = std::max(0.0f, container_size - item_size);
+    switch(justify) {
+    case JustifyContent::Start:
+    case JustifyContent::SpaceBetween:
+        return 0.0f;
+    case JustifyContent::Center:
+        return remain * 0.5f;
+    case JustifyContent::End:
+        return remain;
     }
 
     return 0.0f;
@@ -276,7 +325,7 @@ struct MainAxisPlacement {
     return placement;
 }
 
-void layout_subtree(UiTree& tree, std::size_t node_index)
+void layout_subtree(UiTree& tree, std::size_t node_index, gfx::Renderer* renderer)
 {
     UiNode* node = tree.get(node_index);
     if(node == nullptr || node->children.empty()) {
@@ -306,7 +355,8 @@ void layout_subtree(UiTree& tree, std::size_t node_index)
     std::vector<ComputedSize> sizes;
     sizes.resize(auto_children.size());
 
-    if(node->layout_config.overflow == OverflowPolicy::Wrap) {
+    if(node->layout_config.overflow == OverflowPolicy::Wrap
+        && direction != LayoutDirection::Grid) {
         if(direction == LayoutDirection::Row) {
             float cursor_x = inner_x;
             float cursor_y = inner_y;
@@ -322,11 +372,15 @@ void layout_subtree(UiTree& tree, std::size_t node_index)
                 float width = 0.0f;
                 if(child->layout_config.width_mode == SizeMode::Fill) {
                     const float remaining_line_w = std::max(0.0f, line_end_x - cursor_x);
-                    width = resolve_width(*child, inner_w, remaining_line_w);
+                    width = resolve_width(*child, inner_w, remaining_line_w, renderer);
                 } else {
-                    width = resolve_width(*child, inner_w, inner_w);
+                    width = resolve_width(*child, inner_w, inner_w, renderer);
                 }
-                const float height = resolve_height(*child, inner_h, inner_h);
+                float height = resolve_height(*child, inner_h, inner_h);
+                if(node->layout_config.align_items == AlignItems::Stretch
+                    && child->layout_config.height_mode == SizeMode::Auto) {
+                    height = clamp_height_to_constraints(*child, inner_h);
+                }
 
                 const bool needs_wrap = (cursor_x > inner_x) && ((cursor_x + width) > line_end_x);
                 if(needs_wrap) {
@@ -336,7 +390,7 @@ void layout_subtree(UiTree& tree, std::size_t node_index)
 
                     if(child->layout_config.width_mode == SizeMode::Fill) {
                         const float remaining_line_w = std::max(0.0f, line_end_x - cursor_x);
-                        width = resolve_width(*child, inner_w, remaining_line_w);
+                        width = resolve_width(*child, inner_w, remaining_line_w, renderer);
                     }
                 }
 
@@ -366,7 +420,11 @@ void layout_subtree(UiTree& tree, std::size_t node_index)
                     continue;
                 }
 
-                const float width = resolve_width(*child, inner_w, inner_w);
+                float width = resolve_width(*child, inner_w, inner_w, renderer);
+                if(node->layout_config.align_items == AlignItems::Stretch
+                    && child->layout_config.width_mode == SizeMode::Auto) {
+                    width = clamp_width_to_constraints(*child, inner_w);
+                }
                 float height = 0.0f;
                 if(child->layout_config.height_mode == SizeMode::Fill) {
                     const float remaining_column_h = std::max(0.0f, column_end_y - cursor_y);
@@ -404,7 +462,136 @@ void layout_subtree(UiTree& tree, std::size_t node_index)
         }
 
         for(const std::size_t child_index : node->children) {
-            layout_subtree(tree, child_index);
+            layout_subtree(tree, child_index, renderer);
+        }
+        return;
+    }
+
+    if(direction == LayoutDirection::Grid) {
+        if(auto_children.empty()) {
+            for(const std::size_t child_index : node->children) {
+                layout_subtree(tree, child_index, renderer);
+            }
+            return;
+        }
+
+        const std::size_t column_count = !node->layout_config.grid_columns.empty()
+            ? node->layout_config.grid_columns.size()
+            : std::max<std::size_t>(1U, node->layout_config.grid_auto_columns);
+        const std::size_t row_count =
+            (auto_children.size() + column_count - 1U) / column_count;
+
+        std::vector<float> column_widths;
+        if(!node->layout_config.grid_columns.empty()) {
+            column_widths = resolve_axis_tracks(
+                inner_w,
+                node->layout_config.grid_columns,
+                0.0f,
+                gap
+            );
+        } else {
+            const float total_gap = column_count > 1U
+                ? gap * static_cast<float>(column_count - 1U)
+                : 0.0f;
+            const float available_columns_w = std::max(0.0f, inner_w - total_gap);
+            const float column_w = column_count > 0U
+                ? (available_columns_w / static_cast<float>(column_count))
+                : 0.0f;
+            column_widths.assign(column_count, column_w);
+        }
+        if(column_widths.size() < column_count) {
+            column_widths.resize(column_count, 0.0f);
+        }
+
+        std::vector<float> row_heights(row_count, 0.0f);
+        if(node->layout_config.grid_rows.size() == row_count) {
+            row_heights = resolve_axis_tracks(
+                inner_h,
+                node->layout_config.grid_rows,
+                0.0f,
+                gap
+            );
+        } else {
+            for(std::size_t i = 0U; i < auto_children.size(); ++i) {
+                UiNode* child = tree.get(auto_children[i]);
+                if(child == nullptr) {
+                    continue;
+                }
+
+                const std::size_t row = i / column_count;
+                const float child_h = resolve_height(*child, inner_h, inner_h);
+                row_heights[row] = std::max(row_heights[row], child_h);
+            }
+        }
+
+        const float total_grid_h = row_heights.empty()
+            ? 0.0f
+            : std::accumulate(row_heights.begin(), row_heights.end(), 0.0f)
+                + (gap * static_cast<float>(row_heights.size() - 1U));
+        if(node->layout_config.overflow == OverflowPolicy::Scroll) {
+            const float max_scroll_y = std::max(0.0f, total_grid_h - inner_h);
+            node->state.scroll_y = std::clamp(node->state.scroll_y, 0.0f, max_scroll_y);
+            node->state.scroll_x = 0.0f;
+        } else {
+            node->state.scroll_x = 0.0f;
+            node->state.scroll_y = 0.0f;
+        }
+
+        std::vector<float> column_x(column_count, inner_x);
+        for(std::size_t col = 1U; col < column_count; ++col) {
+            column_x[col] = column_x[col - 1U] + column_widths[col - 1U] + gap;
+        }
+
+        std::vector<float> row_y(row_count, inner_y - node->state.scroll_y);
+        for(std::size_t row = 1U; row < row_count; ++row) {
+            row_y[row] = row_y[row - 1U] + row_heights[row - 1U] + gap;
+        }
+
+        for(std::size_t i = 0U; i < auto_children.size(); ++i) {
+            UiNode* child = tree.get(auto_children[i]);
+            if(child == nullptr) {
+                continue;
+            }
+
+            const std::size_t row = i / column_count;
+            const std::size_t col = i % column_count;
+            const float cell_x = column_x[col];
+            const float cell_y = row_y[row];
+            const float cell_w = column_widths[col];
+            const float cell_h = row_heights[row];
+
+            float child_w = resolve_width(*child, cell_w, cell_w, renderer);
+            float child_h = resolve_height(*child, cell_h, cell_h);
+            if(node->layout_config.align_items == AlignItems::Stretch
+                && child->layout_config.width_mode == SizeMode::Auto) {
+                child_w = clamp_width_to_constraints(*child, cell_w);
+            }
+
+            const float x_offset = apply_cross_align_offset(
+                node->layout_config.align_items,
+                cell_w,
+                child_w
+            );
+            const float y_offset = apply_justify_offset(
+                node->layout_config.justify_content,
+                cell_h,
+                child_h
+            );
+
+            assign_layout(
+                tree,
+                auto_children[i],
+                gfx::Rect{
+                    cell_x + x_offset,
+                    cell_y + y_offset,
+                    child_w,
+                    child_h
+                }
+            );
+        }
+
+        for(const std::size_t child_index : node->children) {
+            layout_subtree(tree, child_index, renderer);
         }
         return;
     }
@@ -433,6 +620,10 @@ void layout_subtree(UiTree& tree, std::size_t node_index)
 
                 sizes[i].width = clamp_width_to_constraints(*child, track_widths[i]);
                 sizes[i].height = resolve_height(*child, inner_h, inner_h);
+                if(node->layout_config.align_items == AlignItems::Stretch
+                    && child->layout_config.height_mode == SizeMode::Auto) {
+                    sizes[i].height = clamp_height_to_constraints(*child, inner_h);
+                }
                 total_width += sizes[i].width;
             }
         } else {
@@ -447,7 +638,7 @@ void layout_subtree(UiTree& tree, std::size_t node_index)
                 if(child->layout_config.width_mode == SizeMode::Fill) {
                     fill_width_weight_sum += std::max(0.0f, child->layout_config.width_fill_weight);
                 } else {
-                    const float width = resolve_width(*child, inner_w, inner_w);
+                    const float width = resolve_width(*child, inner_w, inner_w, renderer);
                     sizes[i].width = width;
                     non_fill_width_sum += width;
                 }
@@ -465,10 +656,14 @@ void layout_subtree(UiTree& tree, std::size_t node_index)
                     const float fill_width = fill_width_weight_sum > 0.0f
                         ? remain_width * (weight / fill_width_weight_sum)
                         : 0.0f;
-                    sizes[i].width = resolve_width(*child, inner_w, fill_width);
+                    sizes[i].width = resolve_width(*child, inner_w, fill_width, renderer);
                 }
 
                 sizes[i].height = resolve_height(*child, inner_h, inner_h);
+                if(node->layout_config.align_items == AlignItems::Stretch
+                    && child->layout_config.height_mode == SizeMode::Auto) {
+                    sizes[i].height = clamp_height_to_constraints(*child, inner_h);
+                }
                 total_width += sizes[i].width;
             }
         }
@@ -561,7 +756,11 @@ void layout_subtree(UiTree& tree, std::size_t node_index)
                 }
 
                 sizes[i].height = clamp_height_to_constraints(*child, track_heights[i]);
-                sizes[i].width = resolve_width(*child, inner_w, inner_w);
+                sizes[i].width = resolve_width(*child, inner_w, inner_w, renderer);
+                if(node->layout_config.align_items == AlignItems::Stretch
+                    && child->layout_config.width_mode == SizeMode::Auto) {
+                    sizes[i].width = clamp_width_to_constraints(*child, inner_w);
+                }
                 total_height += sizes[i].height;
             }
         } else {
@@ -597,7 +796,11 @@ void layout_subtree(UiTree& tree, std::size_t node_index)
                     sizes[i].height = resolve_height(*child, inner_h, fill_height);
                 }
 
-                sizes[i].width = resolve_width(*child, inner_w, inner_w);
+                sizes[i].width = resolve_width(*child, inner_w, inner_w, renderer);
+                if(node->layout_config.align_items == AlignItems::Stretch
+                    && child->layout_config.width_mode == SizeMode::Auto) {
+                    sizes[i].width = clamp_width_to_constraints(*child, inner_w);
+                }
                 total_height += sizes[i].height;
             }
         }
@@ -670,7 +873,7 @@ void layout_subtree(UiTree& tree, std::size_t node_index)
     }
 
     for(const std::size_t child_index : node->children) {
-        layout_subtree(tree, child_index);
+        layout_subtree(tree, child_index, renderer);
     }
 }
 
@@ -981,6 +1184,11 @@ void execute_draw_command(
 
 void Pipeline::layout(UiTree& tree, gfx::Rect viewport) const
 {
+    layout(tree, viewport, static_cast<gfx::Renderer*>(nullptr));
+}
+
+void Pipeline::layout(UiTree& tree, gfx::Rect viewport, gfx::Renderer* renderer) const
+{
     const std::size_t root_index = tree.root();
     UiNode* root = tree.get(root_index);
     if(root == nullptr) {
@@ -1003,7 +1211,7 @@ void Pipeline::layout(UiTree& tree, gfx::Rect viewport) const
 
     const std::vector<std::size_t> layout_roots = collect_layout_roots(tree);
     for(const std::size_t layout_root : layout_roots) {
-        layout_subtree(tree, layout_root);
+        layout_subtree(tree, layout_root, renderer);
     }
 
     tree.clear_all_dirty(DirtyFlags::Layout | DirtyFlags::Structure);

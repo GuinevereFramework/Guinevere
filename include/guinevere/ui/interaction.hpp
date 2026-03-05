@@ -138,6 +138,11 @@ struct DrawCommand {
 class Pipeline {
 public:
     void layout(UiTree& tree, gfx::Rect viewport) const;
+    void layout(UiTree& tree, gfx::Rect viewport, gfx::Renderer* renderer) const;
+    void layout(UiTree& tree, gfx::Rect viewport, gfx::Renderer& renderer) const
+    {
+        layout(tree, viewport, &renderer);
+    }
     std::vector<DrawCommand> build_draw_commands(const UiTree& tree) const;
     void paint(gfx::Renderer& renderer, const std::vector<DrawCommand>& commands) const;
     void paint(
