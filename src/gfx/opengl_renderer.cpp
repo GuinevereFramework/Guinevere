@@ -111,6 +111,153 @@ Utf8DecodeResult decode_one_utf8(std::string_view text, std::size_t i)
     return invalid;
 }
 
+[[nodiscard]] bool is_valid_utf8(std::string_view text)
+{
+    std::size_t i = 0U;
+    while(i < text.size()) {
+        const unsigned char b0 = static_cast<unsigned char>(text[i]);
+        if(b0 < 0x80u) {
+            ++i;
+            continue;
+        }
+
+        if((b0 & 0xE0u) == 0xC0u) {
+            if(i + 1U >= text.size()) {
+                return false;
+            }
+            const unsigned char b1 = static_cast<unsigned char>(text[i + 1U]);
+            if((b1 & 0xC0u) != 0x80u) {
+                return false;
+            }
+            const std::uint32_t cp = ((static_cast<std::uint32_t>(b0) & 0x1Fu) << 6u)
+                | (static_cast<std::uint32_t>(b1) & 0x3Fu);
+            if(cp < 0x80u) {
+                return false;
+            }
+            i += 2U;
+            continue;
+        }
+
+        if((b0 & 0xF0u) == 0xE0u) {
+            if(i + 2U >= text.size()) {
+                return false;
+            }
+            const unsigned char b1 = static_cast<unsigned char>(text[i + 1U]);
+            const unsigned char b2 = static_cast<unsigned char>(text[i + 2U]);
+            if(((b1 & 0xC0u) != 0x80u) || ((b2 & 0xC0u) != 0x80u)) {
+                return false;
+            }
+            const std::uint32_t cp = ((static_cast<std::uint32_t>(b0) & 0x0Fu) << 12u)
+                | ((static_cast<std::uint32_t>(b1) & 0x3Fu) << 6u)
+                | (static_cast<std::uint32_t>(b2) & 0x3Fu);
+            if(cp < 0x800u || (cp >= 0xD800u && cp <= 0xDFFFu)) {
+                return false;
+            }
+            i += 3U;
+            continue;
+        }
+
+        if((b0 & 0xF8u) == 0xF0u) {
+            if(i + 3U >= text.size()) {
+                return false;
+            }
+            const unsigned char b1 = static_cast<unsigned char>(text[i + 1U]);
+            const unsigned char b2 = static_cast<unsigned char>(text[i + 2U]);
+            const unsigned char b3 = static_cast<unsigned char>(text[i + 3U]);
+            if(((b1 & 0xC0u) != 0x80u)
+                || ((b2 & 0xC0u) != 0x80u)
+                || ((b3 & 0xC0u) != 0x80u)) {
+                return false;
+            }
+            const std::uint32_t cp = ((static_cast<std::uint32_t>(b0) & 0x07u) << 18u)
+                | ((static_cast<std::uint32_t>(b1) & 0x3Fu) << 12u)
+                | ((static_cast<std::uint32_t>(b2) & 0x3Fu) << 6u)
+                | (static_cast<std::uint32_t>(b3) & 0x3Fu);
+            if(cp < 0x10000u || cp > 0x10FFFFu) {
+                return false;
+            }
+            i += 4U;
+            continue;
+        }
+
+        return false;
+    }
+
+    return true;
+}
+
+#ifdef _WIN32
+[[nodiscard]] std::string convert_ansi_to_utf8(std::string_view text)
+{
+    if(text.empty()) {
+        return {};
+    }
+
+    const int src_len = static_cast<int>(text.size());
+    int wide_len = MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, text.data(), src_len, nullptr, 0);
+    if(wide_len <= 0) {
+        wide_len = MultiByteToWideChar(CP_ACP, 0, text.data(), src_len, nullptr, 0);
+    }
+    if(wide_len <= 0) {
+        return std::string(text);
+    }
+
+    std::wstring wide(static_cast<std::size_t>(wide_len), L'\0');
+    if(MultiByteToWideChar(CP_ACP, 0, text.data(), src_len, wide.data(), wide_len) <= 0) {
+        return std::string(text);
+    }
+
+    const int utf8_len = WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        wide.data(),
+        wide_len,
+        nullptr,
+        0,
+        nullptr,
+        nullptr
+    );
+    if(utf8_len <= 0) {
+        return std::string(text);
+    }
+
+    std::string utf8(static_cast<std::size_t>(utf8_len), '\0');
+    if(WideCharToMultiByte(
+           CP_UTF8,
+           0,
+           wide.data(),
+           wide_len,
+           utf8.data(),
+           utf8_len,
+           nullptr,
+           nullptr
+       )
+        <= 0) {
+        return std::string(text);
+    }
+
+    return utf8;
+}
+#endif
+
+struct NormalizedUtf8Text {
+    std::string converted;
+    std::string_view view;
+};
+
+[[nodiscard]] NormalizedUtf8Text normalize_text_utf8(std::string_view text)
+{
+#ifdef _WIN32
+    if(!is_valid_utf8(text)) {
+        NormalizedUtf8Text normalized;
+        normalized.converted = convert_ansi_to_utf8(text);
+        normalized.view = normalized.converted;
+        return normalized;
+    }
+#endif
+    return NormalizedUtf8Text{{}, text};
+}
+
 [[nodiscard]] bool path_exists(const std::filesystem::path& path)
 {
     std::error_code ec;
@@ -693,13 +840,15 @@ public:
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
         glColor4f(color.r, color.g, color.b, color.a);
+        const NormalizedUtf8Text normalized_text = normalize_text_utf8(text);
+        const std::string_view text_utf8 = normalized_text.view;
 
         // OpenGL immediate mode does not allow texture uploads between glBegin/glEnd.
         // Preload all required glyphs first so ensure_glyph can safely call glTexSubImage2D.
         std::vector<std::uint32_t> glyph_sequence;
-        glyph_sequence.reserve(text.size());
-        for(std::size_t i = 0; i < text.size();) {
-            const Utf8DecodeResult dec = decode_one_utf8(text, i);
+        glyph_sequence.reserve(text_utf8.size());
+        for(std::size_t i = 0; i < text_utf8.size();) {
+            const Utf8DecodeResult dec = decode_one_utf8(text_utf8, i);
             if(dec.bytes_consumed == 0u) {
                 break;
             }
@@ -819,9 +968,11 @@ public:
         }
         font->last_used_frame = frame_index_;
 
+        const NormalizedUtf8Text normalized_text = normalize_text_utf8(text);
+        const std::string_view text_utf8 = normalized_text.view;
         float width = 0.0f;
-        for(std::size_t i = 0; i < text.size();) {
-            const Utf8DecodeResult dec = decode_one_utf8(text, i);
+        for(std::size_t i = 0; i < text_utf8.size();) {
+            const Utf8DecodeResult dec = decode_one_utf8(text_utf8, i);
             if(dec.bytes_consumed == 0u) {
                 break;
             }

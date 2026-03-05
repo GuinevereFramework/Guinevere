@@ -1082,6 +1082,18 @@ void Pipeline::paint(
 ) const
 {
     ensure_paint_regions(tree);
+    if(clear_color.has_value()) {
+        // Double-buffered back buffers are not guaranteed to preserve prior
+        // contents after swap; redraw the full frame when a clear color is used.
+        renderer.clear(*clear_color);
+        for(const DrawCommand& command : commands) {
+            execute_draw_command(renderer, command, assets);
+        }
+        tree.clear_all_dirty(DirtyFlags::All);
+        tree.clear_dirty_regions();
+        return;
+    }
+
     const std::vector<gfx::Rect>& dirty_regions = tree.dirty_regions();
     if(dirty_regions.empty()) {
         tree.clear_all_dirty(DirtyFlags::All);
@@ -1094,10 +1106,6 @@ void Pipeline::paint(
         }
 
         renderer.push_clip(dirty);
-        if(clear_color.has_value()) {
-            renderer.fill_rect(dirty, *clear_color);
-        }
-
         for(const DrawCommand& command : commands) {
             if(command.type == DrawCommandType::PushClip
                 || command.type == DrawCommandType::PopClip

@@ -129,7 +129,7 @@ int main()
         guinevere::gfx::Color{0.10f, 0.12f, 0.16f, 1.0f}
     );
 
-    if(renderer.total_draw_calls() != first_pass_draw_calls) {
+    if(renderer.total_draw_calls() <= first_pass_draw_calls) {
         return 1;
     }
 
