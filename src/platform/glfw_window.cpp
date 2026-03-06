@@ -22,6 +22,10 @@ GlfwWindow::GlfwWindow(GlfwWindow&& other) noexcept
     , right_arrow_presses_(other.right_arrow_presses_)
     , up_arrow_presses_(other.up_arrow_presses_)
     , down_arrow_presses_(other.down_arrow_presses_)
+    , ctrl_a_presses_(other.ctrl_a_presses_)
+    , ctrl_c_presses_(other.ctrl_c_presses_)
+    , ctrl_v_presses_(other.ctrl_v_presses_)
+    , ctrl_x_presses_(other.ctrl_x_presses_)
     , toggle_caret_presses_(other.toggle_caret_presses_)
     , scroll_delta_x_(other.scroll_delta_x_)
     , scroll_delta_y_(other.scroll_delta_y_)
@@ -35,6 +39,10 @@ GlfwWindow::GlfwWindow(GlfwWindow&& other) noexcept
     other.right_arrow_presses_ = 0;
     other.up_arrow_presses_ = 0;
     other.down_arrow_presses_ = 0;
+    other.ctrl_a_presses_ = 0;
+    other.ctrl_c_presses_ = 0;
+    other.ctrl_v_presses_ = 0;
+    other.ctrl_x_presses_ = 0;
     other.toggle_caret_presses_ = 0;
     other.scroll_delta_x_ = 0.0f;
     other.scroll_delta_y_ = 0.0f;
@@ -72,6 +80,10 @@ GlfwWindow& GlfwWindow::operator=(GlfwWindow&& other) noexcept
     right_arrow_presses_ = other.right_arrow_presses_;
     up_arrow_presses_ = other.up_arrow_presses_;
     down_arrow_presses_ = other.down_arrow_presses_;
+    ctrl_a_presses_ = other.ctrl_a_presses_;
+    ctrl_c_presses_ = other.ctrl_c_presses_;
+    ctrl_v_presses_ = other.ctrl_v_presses_;
+    ctrl_x_presses_ = other.ctrl_x_presses_;
     toggle_caret_presses_ = other.toggle_caret_presses_;
     scroll_delta_x_ = other.scroll_delta_x_;
     scroll_delta_y_ = other.scroll_delta_y_;
@@ -84,6 +96,10 @@ GlfwWindow& GlfwWindow::operator=(GlfwWindow&& other) noexcept
     other.right_arrow_presses_ = 0;
     other.up_arrow_presses_ = 0;
     other.down_arrow_presses_ = 0;
+    other.ctrl_a_presses_ = 0;
+    other.ctrl_c_presses_ = 0;
+    other.ctrl_v_presses_ = 0;
+    other.ctrl_x_presses_ = 0;
     other.toggle_caret_presses_ = 0;
     other.scroll_delta_x_ = 0.0f;
     other.scroll_delta_y_ = 0.0f;
@@ -271,6 +287,34 @@ unsigned int GlfwWindow::consume_down_arrow_presses() noexcept
     return out;
 }
 
+unsigned int GlfwWindow::consume_ctrl_a_presses() noexcept
+{
+    const unsigned int out = ctrl_a_presses_;
+    ctrl_a_presses_ = 0;
+    return out;
+}
+
+unsigned int GlfwWindow::consume_ctrl_c_presses() noexcept
+{
+    const unsigned int out = ctrl_c_presses_;
+    ctrl_c_presses_ = 0;
+    return out;
+}
+
+unsigned int GlfwWindow::consume_ctrl_v_presses() noexcept
+{
+    const unsigned int out = ctrl_v_presses_;
+    ctrl_v_presses_ = 0;
+    return out;
+}
+
+unsigned int GlfwWindow::consume_ctrl_x_presses() noexcept
+{
+    const unsigned int out = ctrl_x_presses_;
+    ctrl_x_presses_ = 0;
+    return out;
+}
+
 unsigned int GlfwWindow::consume_toggle_caret_presses() noexcept
 {
     const unsigned int out = toggle_caret_presses_;
@@ -306,6 +350,10 @@ ui::InputState GlfwWindow::consume_input_state()
     input.right_arrow_presses = consume_right_arrow_presses();
     input.up_arrow_presses = consume_up_arrow_presses();
     input.down_arrow_presses = consume_down_arrow_presses();
+    input.ctrl_a_presses = consume_ctrl_a_presses();
+    input.ctrl_c_presses = consume_ctrl_c_presses();
+    input.ctrl_v_presses = consume_ctrl_v_presses();
+    input.ctrl_x_presses = consume_ctrl_x_presses();
     input.toggle_caret_presses = consume_toggle_caret_presses();
     return input;
 }
@@ -332,7 +380,6 @@ void GlfwWindow::on_char(GLFWwindow* window, unsigned int codepoint)
 void GlfwWindow::on_key(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
     (void)scancode;
-    (void)mods;
 
     if(window == nullptr) {
         return;
@@ -345,6 +392,29 @@ void GlfwWindow::on_key(GLFWwindow* window, int key, int scancode, int action, i
     auto* self = static_cast<GlfwWindow*>(glfwGetWindowUserPointer(window));
     if(self == nullptr) {
         return;
+    }
+
+    const bool control_pressed = (mods & GLFW_MOD_CONTROL) != 0;
+    if(control_pressed && action == GLFW_PRESS) {
+        if(key == GLFW_KEY_A) {
+            ++self->ctrl_a_presses_;
+            return;
+        }
+
+        if(key == GLFW_KEY_C) {
+            ++self->ctrl_c_presses_;
+            return;
+        }
+
+        if(key == GLFW_KEY_V) {
+            ++self->ctrl_v_presses_;
+            return;
+        }
+
+        if(key == GLFW_KEY_X) {
+            ++self->ctrl_x_presses_;
+            return;
+        }
     }
 
     if(key == GLFW_KEY_BACKSPACE) {

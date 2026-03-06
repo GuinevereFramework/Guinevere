@@ -1,6 +1,5 @@
 #include <iostream>
 #include <string>
-#include <vector>
 
 #include <guinevere/guinevere.hpp>
 
@@ -43,41 +42,6 @@ private:
     std::string title_;
 };
 
-class TextEditorPanel {
-public:
-    void render(guinevere::ui::ComponentScope& component) const
-    {
-        const std::string& text_value_utf8 =
-            component.state().use<std::string>("text_value_utf8", std::string("Type UTF-8 text here"));
-        const std::string& submitted_utf8 =
-            component.state().use<std::string>("submitted_utf8", std::string{});
-        const std::string submitted_label = submitted_utf8.empty()
-            ? std::string("Press Enter in TextEdit to submit")
-            : std::string("Last submitted: ") + submitted_utf8;
-        const std::string panel_key = component.auto_local_key("panel");
-
-        auto panel_entry = component.panel({}, panel_key);
-        panel_entry.column(12.0f, 14.0f);
-        panel_entry.align_stretch();
-        panel_entry.justify_start();
-        panel_entry.min_height(172.0f);
-        component.label(panel_key, "Text Input Component");
-        auto text_edit_entry = component.text_edit(panel_key, text_value_utf8);
-        text_edit_entry.allow_caret_toggle();
-        text_edit_entry.on_text_change([component](const std::string& changed_value_utf8) mutable {
-            component.state().set<std::string>("text_value_utf8", changed_value_utf8);
-        });
-        text_edit_entry.on_text_submit([component](const std::string& submitted_value_utf8) mutable {
-            component.state().set<std::string>("submitted_utf8", submitted_value_utf8);
-        });
-        component.label(panel_key, submitted_label);
-        component.label(
-            panel_key,
-            "Insert: toggle caret | Left/Right: move | Up/Down: start/end"
-        );
-    }
-};
-
 void render_hint_component(guinevere::ui::ComponentScope& component)
 {
     const bool expanded = component.state().use<bool>("expanded", false);
@@ -112,8 +76,7 @@ int main()
     guinevere::ui::UiRuntime ui_runtime("root");
     CounterPanel left_counter("Counter A (Class Component)");
     CounterPanel right_counter("Counter B (Class Component)");
-    TextEditorPanel text_editor;
-    ui_runtime.reserve(24U);
+    ui_runtime.reserve(20U);
 
     guinevere::app::RunConfig config;
     config.width = 960;
@@ -182,11 +145,6 @@ int main()
                 app_component.auto_local_key("counter"),
                 counter_row_key,
                 right_counter
-            );
-            app_component.mount_component(
-                app_component.auto_local_key("editor"),
-                detail_column_key,
-                text_editor
             );
             app_component.mount_invoke(
                 app_component.auto_local_key("hint"),

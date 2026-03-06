@@ -996,16 +996,19 @@ void emit_draw_commands(const UiTree& tree, std::size_t index, std::vector<DrawC
             node->state.focused ? 2.5f : 2.0f
         });
         out.push_back(DrawCommand{
-            DrawCommandType::TextInput,
-            node->layout,
-            gfx::Color{0.94f, 0.97f, 1.0f, 1.0f},
-            1.0f,
-            0.0f,
-            0.0f,
-            node->props.text,
-            node->state.focused,
-            node->state.text_cursor,
-            node->state.caret_visible
+            .type = DrawCommandType::TextInput,
+            .rect = node->layout,
+            .color = gfx::Color{0.94f, 0.97f, 1.0f, 1.0f},
+            .thickness = 1.0f,
+            .text = node->props.text,
+            .focused = node->state.focused,
+            .cursor_index = node->state.text_cursor,
+            .caret_visible = node->state.caret_visible,
+            .selection_anchor_index = node->state.text_selection_anchor,
+            .has_selection_background_color = node->props.has_selection_background_color,
+            .selection_background_color = node->props.selection_background_color,
+            .has_selection_text_color = node->props.has_selection_text_color,
+            .selection_text_color = node->props.selection_text_color
         });
     }
 
@@ -1141,6 +1144,10 @@ void execute_draw_command(
 
         const float baseline_y = command.rect.y + (command.rect.h * 0.62f);
         const std::size_t cursor_index = clamp_utf8_cursor(command.text, command.cursor_index);
+        const std::size_t selection_anchor_index =
+            clamp_utf8_cursor(command.text, command.selection_anchor_index);
+        const std::size_t selection_begin = std::min(cursor_index, selection_anchor_index);
+        const std::size_t selection_limit = std::max(cursor_index, selection_anchor_index);
         const std::string text_before_cursor = command.text.substr(0U, cursor_index);
 
         const float text_width = renderer.measure_text(command.text);
@@ -1149,8 +1156,47 @@ void execute_draw_command(
         const float desired_scroll = std::max(0.0f, cursor_raw_x - std::max(0.0f, text_clip.w - 4.0f));
         const float scroll_x = std::clamp(desired_scroll, 0.0f, max_scroll);
 
+        const bool has_selection = command.focused && selection_begin != selection_limit;
+        float clipped_selection_x = text_clip.x;
+        float clipped_selection_w = 0.0f;
         const float text_x = text_clip.x - scroll_x;
+        if(has_selection) {
+            const float before_selection_w =
+                renderer.measure_text(command.text.substr(0U, selection_begin));
+            const float selected_w = renderer.measure_text(
+                command.text.substr(selection_begin, selection_limit - selection_begin)
+            );
+            const float selection_x = text_clip.x + before_selection_w - scroll_x;
+            const float selection_right = selection_x + selected_w;
+            const float clip_x0 = std::max(text_clip.x, selection_x);
+            const float clip_x1 = std::min(text_clip.x + text_clip.w, selection_right);
+            clipped_selection_x = clip_x0;
+            clipped_selection_w = std::max(0.0f, clip_x1 - clip_x0);
+            if(clipped_selection_w > 0.0f) {
+                renderer.fill_rect(
+                    gfx::Rect{
+                        clipped_selection_x,
+                        command.rect.y + 10.0f,
+                        clipped_selection_w,
+                        std::max(0.0f, command.rect.h - 20.0f)
+                    },
+                    command.has_selection_background_color
+                        ? command.selection_background_color
+                        : gfx::Color{0.02f, 0.02f, 0.02f, 0.88f}
+                );
+            }
+        }
         renderer.draw_text(text_x, baseline_y, command.text, command.color);
+        if(has_selection && command.has_selection_text_color && clipped_selection_w > 0.0f) {
+            renderer.push_clip(gfx::Rect{
+                clipped_selection_x,
+                text_clip.y,
+                clipped_selection_w,
+                text_clip.h
+            });
+            renderer.draw_text(text_x, baseline_y, command.text, command.selection_text_color);
+            renderer.pop_clip();
+        }
 
         if(command.focused && command.caret_visible) {
             float caret_x = text_clip.x + cursor_raw_x - scroll_x;

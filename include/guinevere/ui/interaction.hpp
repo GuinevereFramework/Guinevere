@@ -109,6 +109,7 @@ private:
     bool released_edge_ = false;
     std::unordered_map<std::string, bool> press_armed_;
     std::string active_text_edit_key_;
+    std::string clipboard_utf8_;
 };
 
 enum class DrawCommandType {
@@ -132,6 +133,11 @@ struct DrawCommand {
     bool focused = false;
     std::size_t cursor_index = 0;
     bool caret_visible = true;
+    std::size_t selection_anchor_index = 0;
+    bool has_selection_background_color = false;
+    gfx::Color selection_background_color{0.02f, 0.02f, 0.02f, 0.88f};
+    bool has_selection_text_color = false;
+    gfx::Color selection_text_color{0.94f, 0.97f, 1.0f, 1.0f};
     std::string image_source;
 };
 

@@ -29,3 +29,13 @@ target_link_libraries(guinevere_demo_drm
         guinevere
         guinevere_warnings
 )
+
+add_executable(guinevere_demo_textedit
+    demo_textedit.cpp
+)
+
+target_link_libraries(guinevere_demo_textedit
+    PRIVATE
+        guinevere
+        guinevere_warnings
+)

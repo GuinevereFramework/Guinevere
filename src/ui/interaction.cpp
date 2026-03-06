@@ -15,6 +15,7 @@ namespace {
         && lhs.scroll_x == rhs.scroll_x
         && lhs.scroll_y == rhs.scroll_y
         && lhs.text_cursor == rhs.text_cursor
+        && lhs.text_selection_anchor == rhs.text_selection_anchor
         && lhs.caret_visible == rhs.caret_visible;
 }
 
@@ -86,6 +87,42 @@ namespace {
     const std::size_t start = previous_utf8_boundary(text, cursor);
     text.erase(start, cursor - start);
     cursor = start;
+    return true;
+}
+
+[[nodiscard]] std::size_t selection_start(std::size_t cursor, std::size_t anchor) noexcept
+{
+    return std::min(cursor, anchor);
+}
+
+[[nodiscard]] std::size_t selection_end(std::size_t cursor, std::size_t anchor) noexcept
+{
+    return std::max(cursor, anchor);
+}
+
+[[nodiscard]] bool has_selection(std::size_t cursor, std::size_t anchor) noexcept
+{
+    return cursor != anchor;
+}
+
+[[nodiscard]] bool erase_selected_text(
+    std::string& text,
+    std::size_t& cursor,
+    std::size_t& anchor
+)
+{
+    cursor = clamp_utf8_cursor(text, cursor);
+    anchor = clamp_utf8_cursor(text, anchor);
+    const std::size_t start = selection_start(cursor, anchor);
+    const std::size_t end = selection_end(cursor, anchor);
+    if(start == end) {
+        anchor = cursor;
+        return false;
+    }
+
+    text.erase(start, end - start);
+    cursor = start;
+    anchor = start;
     return true;
 }
 
@@ -167,6 +204,40 @@ namespace {
     }
 
     return text.size();
+}
+
+[[nodiscard]] std::size_t text_edit_cursor_from_mouse(
+    const UiNode& node,
+    std::string_view value_utf8,
+    const InputState& input,
+    gfx::Renderer* renderer
+)
+{
+    constexpr float padding_x = 12.0f;
+    const float clip_x = node.layout.x + padding_x;
+    const float clip_w = std::max(0.0f, node.layout.w - (2.0f * padding_x));
+    if(clip_w <= 0.0f) {
+        return clamp_utf8_cursor(value_utf8, node.state.text_cursor);
+    }
+
+    const std::size_t cursor_index = clamp_utf8_cursor(value_utf8, node.state.text_cursor);
+    const float text_width = measure_text_width(value_utf8, renderer);
+    const float before_cursor_w = measure_text_width(
+        std::string_view(value_utf8).substr(0U, cursor_index),
+        renderer
+    );
+    const float max_scroll = std::max(0.0f, text_width - clip_w);
+    const float desired_scroll = std::max(
+        0.0f,
+        before_cursor_w - std::max(0.0f, clip_w - 4.0f)
+    );
+    const float scroll_x = std::clamp(desired_scroll, 0.0f, max_scroll);
+    const float local_x = std::clamp(
+        input.x - clip_x + scroll_x,
+        0.0f,
+        std::max(0.0f, text_width)
+    );
+    return cursor_from_click_x(value_utf8, local_x, text_width, renderer);
 }
 
 struct ComputedSize {
@@ -331,35 +402,10 @@ bool InteractionState::update_text_edit(
         if(hovered) {
             active_text_edit_key_ = node.key;
             if(node.props.allow_mouse_set_cursor) {
-                constexpr float padding_x = 12.0f;
-                const float clip_x = node.layout.x + padding_x;
-                const float clip_w = std::max(0.0f, node.layout.w - (2.0f * padding_x));
-                if(clip_w > 0.0f) {
-                    const std::size_t cursor_index = clamp_utf8_cursor(value_utf8, node.state.text_cursor);
-                    const float text_width = measure_text_width(value_utf8, renderer);
-                    const float before_cursor_w = measure_text_width(
-                        std::string_view(value_utf8).substr(0U, cursor_index),
-                        renderer
-                    );
-                    const float max_scroll = std::max(0.0f, text_width - clip_w);
-                    const float desired_scroll = std::max(
-                        0.0f,
-                        before_cursor_w - std::max(0.0f, clip_w - 4.0f)
-                    );
-                    const float scroll_x = std::clamp(desired_scroll, 0.0f, max_scroll);
-                    const float local_x = std::clamp(
-                        input_.x - clip_x + scroll_x,
-                        0.0f,
-                        std::max(0.0f, text_width)
-                    );
-                    node.state.text_cursor = cursor_from_click_x(
-                        value_utf8,
-                        local_x,
-                        text_width,
-                        renderer
-                    );
-                }
+                node.state.text_cursor =
+                    text_edit_cursor_from_mouse(node, value_utf8, input_, renderer);
             }
+            node.state.text_selection_anchor = node.state.text_cursor;
         } else if(active_text_edit_key_ == node.key) {
             active_text_edit_key_.clear();
         }
@@ -371,8 +417,20 @@ bool InteractionState::update_text_edit(
         && node.state.focused
         && node.props.allow_mouse_set_cursor;
     node.state.text_cursor = clamp_utf8_cursor(value_utf8, node.state.text_cursor);
+    node.state.text_selection_anchor =
+        clamp_utf8_cursor(value_utf8, node.state.text_selection_anchor);
     if(node.state.focused && !was_focused && !focused_by_mouse_click) {
         node.state.text_cursor = value_utf8.size();
+        node.state.text_selection_anchor = node.state.text_cursor;
+    }
+
+    if(node.state.focused
+       && input_.left_down
+       && node.props.allow_mouse_set_cursor
+       && node.props.allow_mouse_drag_selection
+       && active_text_edit_key_ == node.key) {
+        node.state.text_cursor = text_edit_cursor_from_mouse(node, value_utf8, input_, renderer);
+        node.state.text_cursor = clamp_utf8_cursor(value_utf8, node.state.text_cursor);
     }
 
     bool changed = false;
@@ -381,39 +439,130 @@ bool InteractionState::update_text_edit(
             node.state.caret_visible = !node.state.caret_visible;
         }
 
+        if(node.props.allow_ctrl_a && input_.ctrl_a_presses > 0U) {
+            node.state.text_selection_anchor = 0U;
+            node.state.text_cursor = value_utf8.size();
+        }
+
+        if(node.props.allow_ctrl_c && input_.ctrl_c_presses > 0U) {
+            const std::size_t selection_begin = selection_start(
+                node.state.text_cursor,
+                node.state.text_selection_anchor
+            );
+            const std::size_t selection_limit = selection_end(
+                node.state.text_cursor,
+                node.state.text_selection_anchor
+            );
+            if(selection_begin != selection_limit) {
+                clipboard_utf8_ =
+                    value_utf8.substr(selection_begin, selection_limit - selection_begin);
+            }
+        }
+
+        if(node.props.allow_ctrl_x && input_.ctrl_x_presses > 0U) {
+            const std::size_t selection_begin = selection_start(
+                node.state.text_cursor,
+                node.state.text_selection_anchor
+            );
+            const std::size_t selection_limit = selection_end(
+                node.state.text_cursor,
+                node.state.text_selection_anchor
+            );
+            if(selection_begin != selection_limit) {
+                clipboard_utf8_ =
+                    value_utf8.substr(selection_begin, selection_limit - selection_begin);
+                value_utf8.erase(selection_begin, selection_limit - selection_begin);
+                node.state.text_cursor = selection_begin;
+                node.state.text_selection_anchor = selection_begin;
+                changed = true;
+            }
+        }
+
+        if(node.props.allow_ctrl_v && input_.ctrl_v_presses > 0U && !clipboard_utf8_.empty()) {
+            for(unsigned int i = 0U; i < input_.ctrl_v_presses; ++i) {
+                (void)erase_selected_text(
+                    value_utf8,
+                    node.state.text_cursor,
+                    node.state.text_selection_anchor
+                );
+                value_utf8.insert(node.state.text_cursor, clipboard_utf8_);
+                node.state.text_cursor += clipboard_utf8_.size();
+                node.state.text_cursor = clamp_utf8_cursor(value_utf8, node.state.text_cursor);
+                node.state.text_selection_anchor = node.state.text_cursor;
+                changed = true;
+            }
+        }
+
         if(node.props.allow_arrow_left) {
             for(unsigned int i = 0U; i < input_.left_arrow_presses; ++i) {
-                node.state.text_cursor = previous_utf8_boundary(value_utf8, node.state.text_cursor);
+                if(has_selection(node.state.text_cursor, node.state.text_selection_anchor)) {
+                    node.state.text_cursor = selection_start(
+                        node.state.text_cursor,
+                        node.state.text_selection_anchor
+                    );
+                } else {
+                    node.state.text_cursor =
+                        previous_utf8_boundary(value_utf8, node.state.text_cursor);
+                }
+                node.state.text_selection_anchor = node.state.text_cursor;
             }
         }
 
         if(node.props.allow_arrow_right) {
             for(unsigned int i = 0U; i < input_.right_arrow_presses; ++i) {
-                node.state.text_cursor = next_utf8_boundary(value_utf8, node.state.text_cursor);
+                if(has_selection(node.state.text_cursor, node.state.text_selection_anchor)) {
+                    node.state.text_cursor = selection_end(
+                        node.state.text_cursor,
+                        node.state.text_selection_anchor
+                    );
+                } else {
+                    node.state.text_cursor = next_utf8_boundary(value_utf8, node.state.text_cursor);
+                }
+                node.state.text_selection_anchor = node.state.text_cursor;
             }
         }
 
         if(node.props.allow_arrow_up && input_.up_arrow_presses > 0U) {
             node.state.text_cursor = 0U;
+            node.state.text_selection_anchor = node.state.text_cursor;
         }
 
         if(node.props.allow_arrow_down && input_.down_arrow_presses > 0U) {
             node.state.text_cursor = value_utf8.size();
+            node.state.text_selection_anchor = node.state.text_cursor;
         }
 
         node.state.text_cursor = clamp_utf8_cursor(value_utf8, node.state.text_cursor);
+        node.state.text_selection_anchor =
+            clamp_utf8_cursor(value_utf8, node.state.text_selection_anchor);
 
         for(unsigned int i = 0U; i < input_.backspace_presses; ++i) {
+            if(erase_selected_text(
+                   value_utf8,
+                   node.state.text_cursor,
+                   node.state.text_selection_anchor
+               )) {
+                changed = true;
+                continue;
+            }
+
             if(!erase_previous_utf8_codepoint(value_utf8, node.state.text_cursor)) {
                 break;
             }
+            node.state.text_selection_anchor = node.state.text_cursor;
             changed = true;
         }
 
         if(!input_.text_utf8.empty()) {
+            (void)erase_selected_text(
+                value_utf8,
+                node.state.text_cursor,
+                node.state.text_selection_anchor
+            );
             value_utf8.insert(node.state.text_cursor, input_.text_utf8);
             node.state.text_cursor += input_.text_utf8.size();
             node.state.text_cursor = clamp_utf8_cursor(value_utf8, node.state.text_cursor);
+            node.state.text_selection_anchor = node.state.text_cursor;
             changed = true;
         }
 

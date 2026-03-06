@@ -212,6 +212,37 @@ int main()
     }
 
     {
+        std::vector<ReconciledNode> text_edit_frame;
+        FrameBuilder text_edit_builder(text_edit_frame);
+
+        (void)text_edit_builder.text_edit("root", "text_edit_default_ctrl", "Hello");
+        if(text_edit_frame.empty()) {
+            return 1;
+        }
+        const auto& default_text_edit = text_edit_frame.back().node;
+        if(!default_text_edit.allow_ctrl_a
+            || !default_text_edit.allow_ctrl_c
+            || !default_text_edit.allow_ctrl_v
+            || !default_text_edit.allow_ctrl_x) {
+            return 1;
+        }
+
+        auto toggled_text_edit = text_edit_builder.text_edit(
+            "root",
+            "text_edit_toggled_ctrl",
+            "Hello"
+        );
+        toggled_text_edit.allow_ctrl_shortcuts(false);
+        const auto& toggled_text_edit_node = text_edit_frame.back().node;
+        if(toggled_text_edit_node.allow_ctrl_a
+            || toggled_text_edit_node.allow_ctrl_c
+            || toggled_text_edit_node.allow_ctrl_v
+            || toggled_text_edit_node.allow_ctrl_x) {
+            return 1;
+        }
+    }
+
+    {
         std::vector<ReconciledNode> grid_frame;
         FrameBuilder grid_builder(grid_frame);
         auto grid_entry = grid_builder.grid(

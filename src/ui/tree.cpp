@@ -150,7 +150,22 @@ struct NodeSnapshot {
         && lhs.allow_arrow_right == rhs.allow_arrow_right
         && lhs.allow_arrow_up == rhs.allow_arrow_up
         && lhs.allow_arrow_down == rhs.allow_arrow_down
-        && lhs.allow_mouse_set_cursor == rhs.allow_mouse_set_cursor;
+        && lhs.allow_ctrl_a == rhs.allow_ctrl_a
+        && lhs.allow_ctrl_c == rhs.allow_ctrl_c
+        && lhs.allow_ctrl_v == rhs.allow_ctrl_v
+        && lhs.allow_ctrl_x == rhs.allow_ctrl_x
+        && lhs.allow_mouse_set_cursor == rhs.allow_mouse_set_cursor
+        && lhs.allow_mouse_drag_selection == rhs.allow_mouse_drag_selection
+        && lhs.has_selection_background_color == rhs.has_selection_background_color
+        && lhs.selection_background_color.r == rhs.selection_background_color.r
+        && lhs.selection_background_color.g == rhs.selection_background_color.g
+        && lhs.selection_background_color.b == rhs.selection_background_color.b
+        && lhs.selection_background_color.a == rhs.selection_background_color.a
+        && lhs.has_selection_text_color == rhs.has_selection_text_color
+        && lhs.selection_text_color.r == rhs.selection_text_color.r
+        && lhs.selection_text_color.g == rhs.selection_text_color.g
+        && lhs.selection_text_color.b == rhs.selection_text_color.b
+        && lhs.selection_text_color.a == rhs.selection_text_color.a;
 }
 
 [[nodiscard]] bool node_state_equal(const NodeState& lhs, const NodeState& rhs) noexcept
@@ -162,6 +177,7 @@ struct NodeSnapshot {
         && lhs.scroll_x == rhs.scroll_x
         && lhs.scroll_y == rhs.scroll_y
         && lhs.text_cursor == rhs.text_cursor
+        && lhs.text_selection_anchor == rhs.text_selection_anchor
         && lhs.caret_visible == rhs.caret_visible;
 }
 
@@ -456,7 +472,16 @@ void Reconciler::reconcile(
         node.props.allow_arrow_right = entry.node.allow_arrow_right;
         node.props.allow_arrow_up = entry.node.allow_arrow_up;
         node.props.allow_arrow_down = entry.node.allow_arrow_down;
+        node.props.allow_ctrl_a = entry.node.allow_ctrl_a;
+        node.props.allow_ctrl_c = entry.node.allow_ctrl_c;
+        node.props.allow_ctrl_v = entry.node.allow_ctrl_v;
+        node.props.allow_ctrl_x = entry.node.allow_ctrl_x;
         node.props.allow_mouse_set_cursor = entry.node.allow_mouse_set_cursor;
+        node.props.allow_mouse_drag_selection = entry.node.allow_mouse_drag_selection;
+        node.props.has_selection_background_color = entry.node.has_selection_background_color;
+        node.props.selection_background_color = entry.node.selection_background_color;
+        node.props.has_selection_text_color = entry.node.has_selection_text_color;
+        node.props.selection_text_color = entry.node.selection_text_color;
         node.dirty_flags = DirtyFlags::Structure
             | DirtyFlags::Layout
             | DirtyFlags::Paint

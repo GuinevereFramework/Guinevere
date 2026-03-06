@@ -22,6 +22,7 @@ cmake --build build --config Debug
 build\examples\Debug\guinevere_demo_style.exe
 build\examples\Debug\guinevere_demo_window.exe
 build\examples\Debug\guinevere_demo_drm.exe
+build\examples\Debug\guinevere_demo_textedit.exe
 ```
 
 ## Use in another CMake project (single dependency)
@@ -191,7 +192,7 @@ ui_state.update<int>("font_size", [](int& value) {
 
 Use `set(...)` / `update(...)` when you need observer callbacks.
 
-See `examples/demo_window.cpp` and `examples/demo_drm.cpp` for retained-mode demos.
+See `examples/demo_window.cpp`, `examples/demo_drm.cpp`, and `examples/demo_textedit.cpp` for retained-mode demos.
 
 ## Notes
 

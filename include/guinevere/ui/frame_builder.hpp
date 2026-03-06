@@ -94,6 +94,39 @@ public:
             node().node.allow_arrow_down = value;
         }
 
+        void allow_ctrl_a(bool value = true)
+        {
+            node().node.allow_ctrl_a = value;
+        }
+
+        void allow_ctrl_c(bool value = true)
+        {
+            node().node.allow_ctrl_c = value;
+        }
+
+        void allow_ctrl_v(bool value = true)
+        {
+            node().node.allow_ctrl_v = value;
+        }
+
+        void allow_ctrl_x(bool value = true)
+        {
+            node().node.allow_ctrl_x = value;
+        }
+
+        void allow_clipboard_shortcuts(bool value = true)
+        {
+            node().node.allow_ctrl_a = value;
+            node().node.allow_ctrl_c = value;
+            node().node.allow_ctrl_v = value;
+            node().node.allow_ctrl_x = value;
+        }
+
+        void allow_ctrl_shortcuts(bool value = true)
+        {
+            allow_clipboard_shortcuts(value);
+        }
+
         void allow_arrow_keys(bool value = true)
         {
             node().node.allow_arrow_left = value;
@@ -105,6 +138,29 @@ public:
         void allow_mouse_set_cursor(bool value = true)
         {
             node().node.allow_mouse_set_cursor = value;
+        }
+
+        void allow_mouse_drag_selection(bool value = true)
+        {
+            node().node.allow_mouse_drag_selection = value;
+        }
+
+        void selection_background_color(gfx::Color value)
+        {
+            node().node.has_selection_background_color = true;
+            node().node.selection_background_color = value;
+        }
+
+        void selection_text_color(gfx::Color value)
+        {
+            node().node.has_selection_text_color = true;
+            node().node.selection_text_color = value;
+        }
+
+        void selection_colors(gfx::Color background, gfx::Color text)
+        {
+            selection_background_color(background);
+            selection_text_color(text);
         }
 
         void layout(gfx::Rect rect)
@@ -583,6 +639,7 @@ public:
     {
         Entry entry = add(std::move(parent_key), std::move(key), NodeKind::TextEdit);
         entry.text(std::move(value_utf8));
+        entry.allow_ctrl_shortcuts(true);
         return entry;
     }
 

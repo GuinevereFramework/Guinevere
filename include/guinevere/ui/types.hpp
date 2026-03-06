@@ -393,7 +393,16 @@ struct NodeProps {
     bool allow_arrow_right = true;
     bool allow_arrow_up = true;
     bool allow_arrow_down = true;
+    bool allow_ctrl_a = true;
+    bool allow_ctrl_c = true;
+    bool allow_ctrl_v = true;
+    bool allow_ctrl_x = true;
     bool allow_mouse_set_cursor = true;
+    bool allow_mouse_drag_selection = true;
+    bool has_selection_background_color = false;
+    gfx::Color selection_background_color{0.02f, 0.02f, 0.02f, 0.88f};
+    bool has_selection_text_color = false;
+    gfx::Color selection_text_color{0.94f, 0.97f, 1.0f, 1.0f};
 };
 
 struct NodeState {
@@ -404,6 +413,7 @@ struct NodeState {
     float scroll_x = 0.0f;
     float scroll_y = 0.0f;
     std::size_t text_cursor = 0;
+    std::size_t text_selection_anchor = 0;
     bool caret_visible = true;
 };
 
@@ -420,6 +430,10 @@ struct InputState {
     unsigned int right_arrow_presses = 0;
     unsigned int up_arrow_presses = 0;
     unsigned int down_arrow_presses = 0;
+    unsigned int ctrl_a_presses = 0;
+    unsigned int ctrl_c_presses = 0;
+    unsigned int ctrl_v_presses = 0;
+    unsigned int ctrl_x_presses = 0;
     unsigned int toggle_caret_presses = 0;
 };
 
@@ -485,7 +499,16 @@ struct NodeDescriptor {
     bool allow_arrow_right = true;
     bool allow_arrow_up = true;
     bool allow_arrow_down = true;
+    bool allow_ctrl_a = true;
+    bool allow_ctrl_c = true;
+    bool allow_ctrl_v = true;
+    bool allow_ctrl_x = true;
     bool allow_mouse_set_cursor = true;
+    bool allow_mouse_drag_selection = true;
+    bool has_selection_background_color = false;
+    gfx::Color selection_background_color{0.02f, 0.02f, 0.02f, 0.88f};
+    bool has_selection_text_color = false;
+    gfx::Color selection_text_color{0.94f, 0.97f, 1.0f, 1.0f};
     std::optional<gfx::Rect> layout_hint;
     LayoutConfig layout_config{};
 };

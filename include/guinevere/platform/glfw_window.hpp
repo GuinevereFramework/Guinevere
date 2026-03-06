@@ -35,6 +35,10 @@ public:
     [[nodiscard]] unsigned int consume_right_arrow_presses() noexcept;
     [[nodiscard]] unsigned int consume_up_arrow_presses() noexcept;
     [[nodiscard]] unsigned int consume_down_arrow_presses() noexcept;
+    [[nodiscard]] unsigned int consume_ctrl_a_presses() noexcept;
+    [[nodiscard]] unsigned int consume_ctrl_c_presses() noexcept;
+    [[nodiscard]] unsigned int consume_ctrl_v_presses() noexcept;
+    [[nodiscard]] unsigned int consume_ctrl_x_presses() noexcept;
     [[nodiscard]] unsigned int consume_toggle_caret_presses() noexcept;
     [[nodiscard]] float consume_scroll_delta_x() noexcept;
     [[nodiscard]] float consume_scroll_delta_y() noexcept;
@@ -55,6 +59,10 @@ private:
     unsigned int right_arrow_presses_ = 0;
     unsigned int up_arrow_presses_ = 0;
     unsigned int down_arrow_presses_ = 0;
+    unsigned int ctrl_a_presses_ = 0;
+    unsigned int ctrl_c_presses_ = 0;
+    unsigned int ctrl_v_presses_ = 0;
+    unsigned int ctrl_x_presses_ = 0;
     unsigned int toggle_caret_presses_ = 0;
     float scroll_delta_x_ = 0.0f;
     float scroll_delta_y_ = 0.0f;
