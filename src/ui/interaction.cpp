@@ -2,6 +2,8 @@
 
 #include <guinevere/ui/runtime.hpp>
 
+#include "text_edit_display.hpp"
+
 namespace guinevere::ui {
 
 namespace {
@@ -16,7 +18,10 @@ namespace {
         && lhs.scroll_y == rhs.scroll_y
         && lhs.text_cursor == rhs.text_cursor
         && lhs.text_selection_anchor == rhs.text_selection_anchor
-        && lhs.caret_visible == rhs.caret_visible;
+        && lhs.caret_visible == rhs.caret_visible
+        && lhs.text_reveal_begin == rhs.text_reveal_begin
+        && lhs.text_reveal_end == rhs.text_reveal_end
+        && lhs.text_reveal_until_seconds == rhs.text_reveal_until_seconds;
 }
 
 [[nodiscard]] bool contains(float x, float y, gfx::Rect rect)
@@ -25,11 +30,6 @@ namespace {
         && x <= (rect.x + rect.w)
         && y >= rect.y
         && y <= (rect.y + rect.h);
-}
-
-[[nodiscard]] bool is_utf8_continuation_byte(unsigned char byte)
-{
-    return (byte & 0xC0u) == 0x80u;
 }
 
 [[nodiscard]] std::size_t previous_utf8_boundary(std::string_view text, std::size_t cursor)
@@ -41,7 +41,7 @@ namespace {
     std::size_t i = std::min(cursor, text.size());
     do {
         --i;
-    } while(i > 0U && is_utf8_continuation_byte(static_cast<unsigned char>(text[i])));
+    } while(i > 0U && detail::is_utf8_continuation_byte(static_cast<unsigned char>(text[i])));
 
     return i;
 }
@@ -58,7 +58,8 @@ namespace {
     }
 
     ++i;
-    while(i < text.size() && is_utf8_continuation_byte(static_cast<unsigned char>(text[i]))) {
+    while(i < text.size()
+          && detail::is_utf8_continuation_byte(static_cast<unsigned char>(text[i]))) {
         ++i;
     }
     return i;
@@ -71,7 +72,8 @@ namespace {
         return clamped;
     }
 
-    while(clamped > 0U && is_utf8_continuation_byte(static_cast<unsigned char>(text[clamped]))) {
+    while(clamped > 0U
+          && detail::is_utf8_continuation_byte(static_cast<unsigned char>(text[clamped]))) {
         --clamped;
     }
     return clamped;
@@ -218,7 +220,12 @@ struct TextEditLine {
 
 [[nodiscard]] bool text_edit_is_multiline(const UiNode& node) noexcept
 {
-    return node.props.text_edit_input_type == TextEditInputType::MultiLine;
+    return detail::is_multiline_input_type(node.props.text_edit_input_type);
+}
+
+[[nodiscard]] bool text_edit_is_password(const UiNode& node) noexcept
+{
+    return detail::is_password_input_type(node.props.text_edit_input_type);
 }
 
 [[nodiscard]] std::size_t count_text_edit_newlines(std::string_view text) noexcept
@@ -342,7 +349,7 @@ struct TextEditLine {
     bool previous_was_carriage_return = false;
     for(const char ch : text) {
         if(ch == '\r') {
-            if(input_type == TextEditInputType::SingleLine) {
+            if(!detail::is_multiline_input_type(input_type)) {
                 out.push_back(' ');
             } else if(available_newlines > 0U) {
                 out.push_back('\n');
@@ -357,7 +364,7 @@ struct TextEditLine {
                 previous_was_carriage_return = false;
                 continue;
             }
-            if(input_type == TextEditInputType::SingleLine) {
+            if(!detail::is_multiline_input_type(input_type)) {
                 out.push_back(' ');
             } else if(available_newlines > 0U) {
                 out.push_back('\n');
@@ -469,10 +476,24 @@ struct TextEditLine {
         return line.start + cursor_from_click_x(line_text, local_x, line.width, renderer);
     }
 
+    const detail::TextEditDisplayText display = detail::build_text_edit_display_text(
+        value_utf8,
+        node.props.text_edit_input_type,
+        node.props.text_edit_echo_mode,
+        node.state.text_reveal_begin,
+        node.state.text_reveal_end,
+        node.state.text_reveal_until_seconds,
+        input.elapsed_seconds
+    );
+    if(display.text.empty()) {
+        return clamp_utf8_cursor(value_utf8, node.state.text_cursor);
+    }
+
     const std::size_t cursor_index = clamp_utf8_cursor(value_utf8, node.state.text_cursor);
-    const float text_width = measure_text_width(value_utf8, renderer);
+    const std::size_t display_cursor_index = detail::display_index_from_source(display, cursor_index);
+    const float text_width = measure_text_width(display.text, renderer);
     const float before_cursor_w = measure_text_width(
-        std::string_view(value_utf8).substr(0U, cursor_index),
+        std::string_view(display.text).substr(0U, display_cursor_index),
         renderer
     );
     const float max_scroll = std::max(0.0f, text_width - clip_w);
@@ -486,7 +507,8 @@ struct TextEditLine {
         0.0f,
         std::max(0.0f, text_width)
     );
-    return cursor_from_click_x(value_utf8, local_x, text_width, renderer);
+    const std::size_t display_index = cursor_from_click_x(display.text, local_x, text_width, renderer);
+    return detail::source_index_from_display(display, display_index);
 }
 
 struct ComputedSize {
@@ -642,7 +664,16 @@ bool InteractionState::update_text_edit(
         *submitted = false;
     }
 
+    const bool is_password_text_edit = text_edit_is_password(node);
+    const TextEditEchoMode echo_mode = detail::effective_echo_mode(
+        node.props.text_edit_input_type,
+        node.props.text_edit_echo_mode
+    );
+    const bool reveal_active = echo_mode.kind == TextEditEchoModeKind::ShowIn
+        && input_.elapsed_seconds < node.state.text_reveal_until_seconds;
+
     const bool was_focused = node.state.focused;
+    node.state.frame_elapsed_seconds = input_.elapsed_seconds;
     const bool hovered = contains(input_.x, input_.y, node.layout);
     node.state.hovered = hovered;
     node.state.pressed = hovered && input_.left_down;
@@ -693,7 +724,7 @@ bool InteractionState::update_text_edit(
             node.state.text_cursor = value_utf8.size();
         }
 
-        if(node.props.allow_ctrl_c && input_.ctrl_c_presses > 0U) {
+        if(node.props.allow_ctrl_c && !is_password_text_edit && input_.ctrl_c_presses > 0U) {
             const std::size_t selection_begin = selection_start(
                 node.state.text_cursor,
                 node.state.text_selection_anchor
@@ -718,17 +749,26 @@ bool InteractionState::update_text_edit(
                 node.state.text_selection_anchor
             );
             if(selection_begin != selection_limit) {
-                clipboard_utf8_ =
-                    value_utf8.substr(selection_begin, selection_limit - selection_begin);
+                if(!is_password_text_edit) {
+                    clipboard_utf8_ =
+                        value_utf8.substr(selection_begin, selection_limit - selection_begin);
+                }
                 value_utf8.erase(selection_begin, selection_limit - selection_begin);
                 node.state.text_cursor = selection_begin;
                 node.state.text_selection_anchor = selection_begin;
+                node.state.text_reveal_begin = selection_begin;
+                node.state.text_reveal_end = selection_begin;
+                node.state.text_reveal_until_seconds = 0.0;
                 changed = true;
             }
         }
 
         if(node.props.allow_ctrl_v && input_.ctrl_v_presses > 0U && !clipboard_utf8_.empty()) {
             for(unsigned int i = 0U; i < input_.ctrl_v_presses; ++i) {
+                const std::size_t insertion_begin = selection_start(
+                    node.state.text_cursor,
+                    node.state.text_selection_anchor
+                );
                 if(insert_text_edit_text(
                        node,
                        value_utf8,
@@ -737,6 +777,15 @@ bool InteractionState::update_text_edit(
                        clipboard_utf8_
                    )) {
                     changed = true;
+                    node.state.text_reveal_begin = insertion_begin;
+                    node.state.text_reveal_end = node.state.text_cursor;
+                    if(is_password_text_edit && echo_mode.kind == TextEditEchoModeKind::ShowIn) {
+                        node.state.text_reveal_until_seconds =
+                            input_.elapsed_seconds
+                            + (static_cast<double>(echo_mode.duration_ms) / 1000.0);
+                    } else {
+                        node.state.text_reveal_until_seconds = 0.0;
+                    }
                 }
             }
         }
@@ -827,6 +876,9 @@ bool InteractionState::update_text_edit(
                    node.state.text_selection_anchor
                )) {
                 changed = true;
+                node.state.text_reveal_begin = node.state.text_cursor;
+                node.state.text_reveal_end = node.state.text_cursor;
+                node.state.text_reveal_until_seconds = 0.0;
                 continue;
             }
 
@@ -835,9 +887,16 @@ bool InteractionState::update_text_edit(
             }
             node.state.text_selection_anchor = node.state.text_cursor;
             changed = true;
+            node.state.text_reveal_begin = node.state.text_cursor;
+            node.state.text_reveal_end = node.state.text_cursor;
+            node.state.text_reveal_until_seconds = 0.0;
         }
 
         if(!input_.text_utf8.empty()) {
+            const std::size_t insertion_begin = selection_start(
+                node.state.text_cursor,
+                node.state.text_selection_anchor
+            );
             if(insert_text_edit_text(
                    node,
                    value_utf8,
@@ -846,12 +905,25 @@ bool InteractionState::update_text_edit(
                    input_.text_utf8
                )) {
                 changed = true;
+                node.state.text_reveal_begin = insertion_begin;
+                node.state.text_reveal_end = node.state.text_cursor;
+                if(is_password_text_edit && echo_mode.kind == TextEditEchoModeKind::ShowIn) {
+                    node.state.text_reveal_until_seconds =
+                        input_.elapsed_seconds
+                        + (static_cast<double>(echo_mode.duration_ms) / 1000.0);
+                } else {
+                    node.state.text_reveal_until_seconds = 0.0;
+                }
             }
         }
 
         if(input_.enter_presses > 0U) {
             if(text_edit_is_multiline(node)) {
                 const std::string newline_insert(input_.enter_presses, '\n');
+                const std::size_t insertion_begin = selection_start(
+                    node.state.text_cursor,
+                    node.state.text_selection_anchor
+                );
                 if(insert_text_edit_text(
                        node,
                        value_utf8,
@@ -860,11 +932,31 @@ bool InteractionState::update_text_edit(
                        newline_insert
                    )) {
                     changed = true;
+                    node.state.text_reveal_begin = insertion_begin;
+                    node.state.text_reveal_end = node.state.text_cursor;
+                    if(is_password_text_edit && echo_mode.kind == TextEditEchoModeKind::ShowIn) {
+                        node.state.text_reveal_until_seconds =
+                            input_.elapsed_seconds
+                            + (static_cast<double>(echo_mode.duration_ms) / 1000.0);
+                    } else {
+                        node.state.text_reveal_until_seconds = 0.0;
+                    }
                 }
             } else if(submitted != nullptr) {
                 *submitted = true;
             }
         }
+    }
+
+    node.state.text_reveal_begin = clamp_utf8_cursor(value_utf8, node.state.text_reveal_begin);
+    node.state.text_reveal_end = clamp_utf8_cursor(value_utf8, node.state.text_reveal_end);
+    if(node.state.text_reveal_begin > node.state.text_reveal_end) {
+        std::swap(node.state.text_reveal_begin, node.state.text_reveal_end);
+    }
+    if(!is_password_text_edit || echo_mode.kind != TextEditEchoModeKind::ShowIn) {
+        node.state.text_reveal_begin = 0U;
+        node.state.text_reveal_end = 0U;
+        node.state.text_reveal_until_seconds = 0.0;
     }
 
     if(node.props.text != value_utf8) {
@@ -873,6 +965,10 @@ bool InteractionState::update_text_edit(
 
     if(!node_state_equal(previous_state, node.state) || previous_text != node.props.text) {
         node.dirty_flags |= DirtyFlags::Paint | DirtyFlags::Interaction;
+    }
+    if(echo_mode.kind == TextEditEchoModeKind::ShowIn
+       && (reveal_active || previous_state.text_reveal_until_seconds > input_.elapsed_seconds)) {
+        node.dirty_flags |= DirtyFlags::Paint;
     }
     if(previous_text != node.props.text) {
         node.dirty_flags |= DirtyFlags::Resource;

@@ -23,6 +23,7 @@ build\examples\Debug\guinevere_demo_window.exe
 build\examples\Debug\guinevere_demo_drm.exe
 build\examples\Debug\guinevere_demo_textedit_singleline.exe
 build\examples\Debug\guinevere_demo_textedit_multiline.exe
+build\examples\Debug\guinevere_demo_textedit_password.exe
 ```
 
 ## Use in another CMake project (single dependency)

@@ -259,6 +259,22 @@ int main()
             || multiline_text_edit_node.text_edit_max_lines != 0U) {
             return 1;
         }
+
+        auto password_text_edit = text_edit_builder.text_edit(
+            "root",
+            "text_edit_password",
+            "secret"
+        );
+        password_text_edit.input_type(guinevere::ui::TextEditInputType::PasswordLine);
+        password_text_edit.echo_mode(guinevere::ui::TextEditEchoMode::show_in(400U));
+        const auto& password_text_edit_node = text_edit_frame.back().node;
+        if(password_text_edit_node.text_edit_input_type
+                != guinevere::ui::TextEditInputType::PasswordLine
+            || password_text_edit_node.text_edit_echo_mode.kind
+                != guinevere::ui::TextEditEchoModeKind::ShowIn
+            || password_text_edit_node.text_edit_echo_mode.duration_ms != 400U) {
+            return 1;
+        }
     }
 
     {

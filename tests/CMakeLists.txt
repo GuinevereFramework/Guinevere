@@ -47,3 +47,15 @@ target_link_libraries(guinevere_layout_helpers_tests
 )
 
 add_test(NAME guinevere_layout_helpers_tests COMMAND guinevere_layout_helpers_tests)
+
+add_executable(guinevere_text_edit_password_tests
+    text_edit_password_test.cpp
+)
+
+target_link_libraries(guinevere_text_edit_password_tests
+    PRIVATE
+        guinevere
+        guinevere_warnings
+)
+
+add_test(NAME guinevere_text_edit_password_tests COMMAND guinevere_text_edit_password_tests)

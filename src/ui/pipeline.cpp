@@ -1,8 +1,11 @@
 #include <algorithm>
+#include <limits>
 #include <numeric>
 
 #include <guinevere/asset/asset_manager.hpp>
 #include <guinevere/ui/runtime.hpp>
+
+#include "text_edit_display.hpp"
 
 namespace guinevere::ui {
 
@@ -91,7 +94,7 @@ constexpr float kTextEditIntrinsicVerticalPadding = 32.0f;
 ) noexcept
 {
     const std::size_t clamped_content_lines = std::max<std::size_t>(1U, content_lines);
-    if(input_type != TextEditInputType::MultiLine) {
+    if(!detail::is_multiline_input_type(input_type)) {
         return 1U;
     }
     if(max_lines == 0U) {
@@ -130,11 +133,6 @@ constexpr float kTextEditIntrinsicVerticalPadding = 32.0f;
     return 48.0f;
 }
 
-[[nodiscard]] bool is_utf8_continuation_byte(unsigned char byte)
-{
-    return (byte & 0xC0u) == 0x80u;
-}
-
 [[nodiscard]] std::size_t count_utf8_codepoints(std::string_view text)
 {
     std::size_t count = 0U;
@@ -142,7 +140,7 @@ constexpr float kTextEditIntrinsicVerticalPadding = 32.0f;
         ++count;
         ++i;
         while(i < text.size()
-            && is_utf8_continuation_byte(static_cast<unsigned char>(text[i]))) {
+            && detail::is_utf8_continuation_byte(static_cast<unsigned char>(text[i]))) {
             ++i;
         }
     }
@@ -209,8 +207,18 @@ struct TextEditLine {
     switch(child.kind) {
     case NodeKind::Button:
         return std::max(112.0f, measure_text_width(child.props.text, renderer) + 32.0f);
-    case NodeKind::TextEdit:
-        return std::max(180.0f, max_text_edit_line_width(child.props.text, renderer) + 28.0f);
+    case NodeKind::TextEdit: {
+        const std::string display_text = detail::build_text_edit_display_text(
+            child.props.text,
+            child.props.text_edit_input_type,
+            child.props.text_edit_echo_mode,
+            0U,
+            0U,
+            0.0,
+            std::numeric_limits<double>::infinity()
+        ).text;
+        return std::max(180.0f, max_text_edit_line_width(display_text, renderer) + 28.0f);
+    }
     case NodeKind::Label:
         return std::max(24.0f, measure_text_width(child.props.text, renderer));
     case NodeKind::Panel:
@@ -307,7 +315,8 @@ struct TextEditLine {
         return clamped;
     }
 
-    while(clamped > 0U && is_utf8_continuation_byte(static_cast<unsigned char>(text[clamped]))) {
+    while(clamped > 0U
+          && detail::is_utf8_continuation_byte(static_cast<unsigned char>(text[clamped]))) {
         --clamped;
     }
     return clamped;
@@ -1104,11 +1113,16 @@ void emit_draw_commands(const UiTree& tree, std::size_t index, std::vector<DrawC
             .thickness = 1.0f,
             .text = node->props.text,
             .focused = node->state.focused,
+            .elapsed_seconds = node->state.frame_elapsed_seconds,
             .cursor_index = node->state.text_cursor,
             .caret_visible = node->state.caret_visible,
             .selection_anchor_index = node->state.text_selection_anchor,
             .text_edit_input_type = node->props.text_edit_input_type,
+            .text_edit_echo_mode = node->props.text_edit_echo_mode,
             .max_lines = node->props.text_edit_max_lines,
+            .text_reveal_begin = node->state.text_reveal_begin,
+            .text_reveal_end = node->state.text_reveal_end,
+            .text_reveal_until_seconds = node->state.text_reveal_until_seconds,
             .has_selection_background_color = node->props.has_selection_background_color,
             .selection_background_color = node->props.selection_background_color,
             .has_selection_text_color = node->props.has_selection_text_color,
@@ -1250,6 +1264,15 @@ void execute_draw_command(
         const std::size_t selection_begin = std::min(cursor_index, selection_anchor_index);
         const std::size_t selection_limit = std::max(cursor_index, selection_anchor_index);
         const bool has_selection = command.focused && selection_begin != selection_limit;
+        const detail::TextEditDisplayText display = detail::build_text_edit_display_text(
+            command.text,
+            command.text_edit_input_type,
+            command.text_edit_echo_mode,
+            command.text_reveal_begin,
+            command.text_reveal_end,
+            command.text_reveal_until_seconds,
+            command.elapsed_seconds
+        );
 
         if(command.text_edit_input_type == TextEditInputType::MultiLine) {
             const std::vector<TextEditLine> lines = build_text_edit_lines(command.text, &renderer);
@@ -1355,8 +1378,20 @@ void execute_draw_command(
             }
         } else {
             const float baseline_y = command.rect.y + (command.rect.h * 0.62f);
-            const std::string text_before_cursor = command.text.substr(0U, cursor_index);
-            const float text_width = renderer.measure_text(command.text);
+            const std::size_t display_cursor_index = detail::display_index_from_source(
+                display,
+                cursor_index
+            );
+            const std::size_t display_selection_begin = detail::display_index_from_source(
+                display,
+                selection_begin
+            );
+            const std::size_t display_selection_limit = detail::display_index_from_source(
+                display,
+                selection_limit
+            );
+            const std::string text_before_cursor = display.text.substr(0U, display_cursor_index);
+            const float text_width = renderer.measure_text(display.text);
             const float cursor_raw_x = renderer.measure_text(text_before_cursor);
             const float max_scroll = std::max(0.0f, text_width - text_clip.w);
             const float desired_scroll =
@@ -1368,9 +1403,12 @@ void execute_draw_command(
             const float text_x = text_clip.x - scroll_x;
             if(has_selection) {
                 const float before_selection_w =
-                    renderer.measure_text(command.text.substr(0U, selection_begin));
+                    renderer.measure_text(display.text.substr(0U, display_selection_begin));
                 const float selected_w = renderer.measure_text(
-                    command.text.substr(selection_begin, selection_limit - selection_begin)
+                    display.text.substr(
+                        display_selection_begin,
+                        display_selection_limit - display_selection_begin
+                    )
                 );
                 const float selection_x = text_clip.x + before_selection_w - scroll_x;
                 const float selection_right = selection_x + selected_w;
@@ -1392,7 +1430,7 @@ void execute_draw_command(
                     );
                 }
             }
-            renderer.draw_text(text_x, baseline_y, command.text, command.color);
+            renderer.draw_text(text_x, baseline_y, display.text, command.color);
             if(has_selection && command.has_selection_text_color && clipped_selection_w > 0.0f) {
                 renderer.push_clip(gfx::Rect{
                     clipped_selection_x,
@@ -1400,7 +1438,12 @@ void execute_draw_command(
                     clipped_selection_w,
                     text_clip.h
                 });
-                renderer.draw_text(text_x, baseline_y, command.text, command.selection_text_color);
+                renderer.draw_text(
+                    text_x,
+                    baseline_y,
+                    display.text,
+                    command.selection_text_color
+                );
                 renderer.pop_clip();
             }
 

@@ -39,3 +39,13 @@ target_link_libraries(guinevere_demo_textedit_multiline
         guinevere
         guinevere_warnings
 )
+
+add_executable(guinevere_demo_textedit_password
+    demo_textedit_password.cpp
+)
+
+target_link_libraries(guinevere_demo_textedit_password
+    PRIVATE
+        guinevere
+        guinevere_warnings
+)

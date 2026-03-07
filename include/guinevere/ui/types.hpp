@@ -76,6 +76,39 @@ enum class OverflowPolicy {
 enum class TextEditInputType {
     SingleLine,
     MultiLine,
+    PasswordLine,
+};
+
+enum class TextEditEchoModeKind {
+    Normal,
+    Password,
+    NoEcho,
+    ShowIn,
+};
+
+struct TextEditEchoMode {
+    TextEditEchoModeKind kind = TextEditEchoModeKind::Password;
+    std::uint32_t duration_ms = 0U;
+
+    [[nodiscard]] static constexpr TextEditEchoMode normal() noexcept
+    {
+        return TextEditEchoMode{TextEditEchoModeKind::Normal, 0U};
+    }
+
+    [[nodiscard]] static constexpr TextEditEchoMode password() noexcept
+    {
+        return TextEditEchoMode{TextEditEchoModeKind::Password, 0U};
+    }
+
+    [[nodiscard]] static constexpr TextEditEchoMode no_echo() noexcept
+    {
+        return TextEditEchoMode{TextEditEchoModeKind::NoEcho, 0U};
+    }
+
+    [[nodiscard]] static constexpr TextEditEchoMode show_in(std::uint32_t duration_ms) noexcept
+    {
+        return TextEditEchoMode{TextEditEchoModeKind::ShowIn, duration_ms};
+    }
 };
 
 enum class DirtyFlags : std::uint32_t {
@@ -394,6 +427,7 @@ struct NodeProps {
     gfx::Color image_tint{1.0f, 1.0f, 1.0f, 1.0f};
     std::vector<std::string> classes;
     TextEditInputType text_edit_input_type = TextEditInputType::SingleLine;
+    TextEditEchoMode text_edit_echo_mode = TextEditEchoMode::password();
     std::size_t text_edit_max_lines = 1U;
     bool allow_user_toggle_caret = true;
     bool allow_arrow_left = true;
@@ -422,6 +456,10 @@ struct NodeState {
     std::size_t text_cursor = 0;
     std::size_t text_selection_anchor = 0;
     bool caret_visible = true;
+    double frame_elapsed_seconds = 0.0;
+    std::size_t text_reveal_begin = 0;
+    std::size_t text_reveal_end = 0;
+    double text_reveal_until_seconds = 0.0;
 };
 
 struct InputState {
@@ -430,6 +468,7 @@ struct InputState {
     float scroll_x = 0.0f;
     float scroll_y = 0.0f;
     bool left_down = false;
+    double elapsed_seconds = 0.0;
     std::string text_utf8;
     unsigned int backspace_presses = 0;
     unsigned int enter_presses = 0;
@@ -502,6 +541,7 @@ struct NodeDescriptor {
     std::function<void(const std::string&)> on_text_change;
     std::function<void(const std::string&)> on_text_submit;
     TextEditInputType text_edit_input_type = TextEditInputType::SingleLine;
+    TextEditEchoMode text_edit_echo_mode = TextEditEchoMode::password();
     std::size_t text_edit_max_lines = 1U;
     bool allow_user_toggle_caret = true;
     bool allow_arrow_left = true;

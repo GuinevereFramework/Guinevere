@@ -131,11 +131,16 @@ struct DrawCommand {
     float text_y = 0.0f;
     std::string text;
     bool focused = false;
+    double elapsed_seconds = 0.0;
     std::size_t cursor_index = 0;
     bool caret_visible = true;
     std::size_t selection_anchor_index = 0;
     TextEditInputType text_edit_input_type = TextEditInputType::SingleLine;
+    TextEditEchoMode text_edit_echo_mode = TextEditEchoMode::password();
     std::size_t max_lines = 1U;
+    std::size_t text_reveal_begin = 0U;
+    std::size_t text_reveal_end = 0U;
+    double text_reveal_until_seconds = 0.0;
     bool has_selection_background_color = false;
     gfx::Color selection_background_color{0.02f, 0.02f, 0.02f, 0.88f};
     bool has_selection_text_color = false;

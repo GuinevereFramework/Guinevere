@@ -135,7 +135,9 @@ void UiRuntime::begin_frame(app::Context& context) noexcept
 {
     const gfx::Rect fb_viewport = viewport(context);
     frame_builder_.app_breakpoint(detect_app_breakpoint(fb_viewport.w));
-    begin_frame(context.window.consume_input_state());
+    InputState input = context.window.consume_input_state();
+    input.elapsed_seconds = context.frame.elapsed_seconds;
+    begin_frame(std::move(input));
 }
 
 UiRuntime::FrameScope UiRuntime::frame(

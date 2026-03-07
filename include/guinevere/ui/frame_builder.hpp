@@ -74,6 +74,11 @@ public:
             node().node.text_edit_input_type = value;
         }
 
+        void echo_mode(TextEditEchoMode value)
+        {
+            node().node.text_edit_echo_mode = value;
+        }
+
         void max_lines(std::size_t value)
         {
             node().node.text_edit_max_lines = value;
