@@ -69,6 +69,16 @@ public:
             node().node.on_text_submit = std::forward<OnSubmit>(on_submit);
         }
 
+        void input_type(TextEditInputType value)
+        {
+            node().node.text_edit_input_type = value;
+        }
+
+        void max_lines(std::size_t value)
+        {
+            node().node.text_edit_max_lines = value;
+        }
+
         void allow_caret_toggle(bool value = true)
         {
             node().node.allow_user_toggle_caret = value;

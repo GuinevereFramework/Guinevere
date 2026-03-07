@@ -145,6 +145,8 @@ struct NodeSnapshot {
         && lhs.image_tint.b == rhs.image_tint.b
         && lhs.image_tint.a == rhs.image_tint.a
         && lhs.classes == rhs.classes
+        && lhs.text_edit_input_type == rhs.text_edit_input_type
+        && lhs.text_edit_max_lines == rhs.text_edit_max_lines
         && lhs.allow_user_toggle_caret == rhs.allow_user_toggle_caret
         && lhs.allow_arrow_left == rhs.allow_arrow_left
         && lhs.allow_arrow_right == rhs.allow_arrow_right
@@ -467,6 +469,8 @@ void Reconciler::reconcile(
         node.props.image_source = entry.node.image_source;
         node.props.image_tint = entry.node.image_tint;
         node.props.classes = entry.node.classes;
+        node.props.text_edit_input_type = entry.node.text_edit_input_type;
+        node.props.text_edit_max_lines = entry.node.text_edit_max_lines;
         node.props.allow_user_toggle_caret = entry.node.allow_user_toggle_caret;
         node.props.allow_arrow_left = entry.node.allow_arrow_left;
         node.props.allow_arrow_right = entry.node.allow_arrow_right;
@@ -520,6 +524,15 @@ void Reconciler::reconcile(
                     || previous.props.image_source != node.props.image_source) {
                     node.dirty_flags |= DirtyFlags::Resource;
                 }
+            }
+
+            if(node.kind == NodeKind::TextEdit
+                && (node.layout_config.width_mode == SizeMode::Auto
+                    || node.layout_config.height_mode == SizeMode::Auto)
+                && (previous.props.text != node.props.text
+                    || previous.props.text_edit_input_type != node.props.text_edit_input_type
+                    || previous.props.text_edit_max_lines != node.props.text_edit_max_lines)) {
+                node.dirty_flags |= DirtyFlags::Layout | DirtyFlags::Paint;
             }
         }
 

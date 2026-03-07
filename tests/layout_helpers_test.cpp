@@ -220,6 +220,11 @@ int main()
             return 1;
         }
         const auto& default_text_edit = text_edit_frame.back().node;
+        if(default_text_edit.text_edit_input_type
+                != guinevere::ui::TextEditInputType::SingleLine
+            || default_text_edit.text_edit_max_lines != 1U) {
+            return 1;
+        }
         if(!default_text_edit.allow_ctrl_a
             || !default_text_edit.allow_ctrl_c
             || !default_text_edit.allow_ctrl_v
@@ -238,6 +243,20 @@ int main()
             || toggled_text_edit_node.allow_ctrl_c
             || toggled_text_edit_node.allow_ctrl_v
             || toggled_text_edit_node.allow_ctrl_x) {
+            return 1;
+        }
+
+        auto multiline_text_edit = text_edit_builder.text_edit(
+            "root",
+            "text_edit_multiline",
+            "Hello"
+        );
+        multiline_text_edit.input_type(guinevere::ui::TextEditInputType::MultiLine);
+        multiline_text_edit.max_lines(0U);
+        const auto& multiline_text_edit_node = text_edit_frame.back().node;
+        if(multiline_text_edit_node.text_edit_input_type
+                != guinevere::ui::TextEditInputType::MultiLine
+            || multiline_text_edit_node.text_edit_max_lines != 0U) {
             return 1;
         }
     }
@@ -470,6 +489,38 @@ int main()
             return 1;
         }
         if(!approx(action->layout.w, 132.0f) || !approx(action->layout.h, 56.0f)) {
+            return 1;
+        }
+    }
+
+    {
+        guinevere::ui::UiTree tree;
+        guinevere::ui::Pipeline pipeline;
+        std::vector<ReconciledNode> multiline_frame;
+        FrameBuilder multiline_builder(multiline_frame);
+
+        auto root_panel = multiline_builder.panel("root", "multiline_root");
+        root_panel.layout(Rect{0.0f, 0.0f, 340.0f, 220.0f});
+        root_panel.column(8.0f, 10.0f);
+        root_panel.align_start();
+
+        auto text_edit = multiline_builder.text_edit(
+            "multiline_root",
+            "notes",
+            "Line 1\nLine 2"
+        );
+        text_edit.input_type(guinevere::ui::TextEditInputType::MultiLine);
+        text_edit.max_lines(0U);
+
+        guinevere::ui::Reconciler::reconcile(tree, "root", multiline_frame);
+        TestMeasureRenderer renderer;
+        pipeline.layout(tree, Rect{0.0f, 0.0f, 340.0f, 220.0f}, renderer);
+
+        const guinevere::ui::UiNode* notes = tree.get(tree.find("notes"));
+        if(notes == nullptr) {
+            return 1;
+        }
+        if(!approx(notes->layout.h, 80.0f)) {
             return 1;
         }
     }

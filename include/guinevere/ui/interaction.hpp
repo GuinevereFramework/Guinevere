@@ -134,6 +134,8 @@ struct DrawCommand {
     std::size_t cursor_index = 0;
     bool caret_visible = true;
     std::size_t selection_anchor_index = 0;
+    TextEditInputType text_edit_input_type = TextEditInputType::SingleLine;
+    std::size_t max_lines = 1U;
     bool has_selection_background_color = false;
     gfx::Color selection_background_color{0.02f, 0.02f, 0.02f, 0.88f};
     bool has_selection_text_color = false;

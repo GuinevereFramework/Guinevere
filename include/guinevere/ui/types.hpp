@@ -73,6 +73,11 @@ enum class OverflowPolicy {
     Scroll,
 };
 
+enum class TextEditInputType {
+    SingleLine,
+    MultiLine,
+};
+
 enum class DirtyFlags : std::uint32_t {
     None = 0u,
     Structure = 1u << 0u,
@@ -388,6 +393,8 @@ struct NodeProps {
     std::string image_source;
     gfx::Color image_tint{1.0f, 1.0f, 1.0f, 1.0f};
     std::vector<std::string> classes;
+    TextEditInputType text_edit_input_type = TextEditInputType::SingleLine;
+    std::size_t text_edit_max_lines = 1U;
     bool allow_user_toggle_caret = true;
     bool allow_arrow_left = true;
     bool allow_arrow_right = true;
@@ -494,6 +501,8 @@ struct NodeDescriptor {
     std::function<void()> on_click;
     std::function<void(const std::string&)> on_text_change;
     std::function<void(const std::string&)> on_text_submit;
+    TextEditInputType text_edit_input_type = TextEditInputType::SingleLine;
+    std::size_t text_edit_max_lines = 1U;
     bool allow_user_toggle_caret = true;
     bool allow_arrow_left = true;
     bool allow_arrow_right = true;

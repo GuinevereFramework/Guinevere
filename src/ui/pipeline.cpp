@@ -67,9 +67,42 @@ void assign_layout(UiTree& tree, std::size_t node_index, gfx::Rect layout)
     tree.invalidate(rect_union(old_layout, layout));
 }
 
-[[nodiscard]] float intrinsic_height(NodeKind kind)
+constexpr float kTextEditPaddingX = 12.0f;
+constexpr float kTextEditPaddingY = 8.0f;
+constexpr float kTextEditLineHeight = 24.0f;
+constexpr float kTextEditLineBaselineOffset = 18.0f;
+constexpr float kTextEditIntrinsicVerticalPadding = 32.0f;
+
+[[nodiscard]] std::size_t count_text_edit_lines(std::string_view text) noexcept
 {
-    switch(kind) {
+    std::size_t count = 1U;
+    for(const char ch : text) {
+        if(ch == '\n') {
+            ++count;
+        }
+    }
+    return count;
+}
+
+[[nodiscard]] std::size_t visible_text_edit_lines(
+    TextEditInputType input_type,
+    std::size_t max_lines,
+    std::size_t content_lines
+) noexcept
+{
+    const std::size_t clamped_content_lines = std::max<std::size_t>(1U, content_lines);
+    if(input_type != TextEditInputType::MultiLine) {
+        return 1U;
+    }
+    if(max_lines == 0U) {
+        return clamped_content_lines;
+    }
+    return std::max<std::size_t>(1U, std::min(clamped_content_lines, max_lines));
+}
+
+[[nodiscard]] float intrinsic_height(const UiNode& child)
+{
+    switch(child.kind) {
     case NodeKind::Root:
         return 0.0f;
     case NodeKind::Panel:
@@ -81,7 +114,13 @@ void assign_layout(UiTree& tree, std::size_t node_index, gfx::Rect layout)
     case NodeKind::Button:
         return 56.0f;
     case NodeKind::TextEdit:
-        return 56.0f;
+        return kTextEditIntrinsicVerticalPadding
+            + (static_cast<float>(visible_text_edit_lines(
+                   child.props.text_edit_input_type,
+                   child.props.text_edit_max_lines,
+                   count_text_edit_lines(child.props.text)
+               ))
+               * kTextEditLineHeight);
     case NodeKind::Label:
         return 32.0f;
     case NodeKind::Custom:
@@ -120,13 +159,58 @@ void assign_layout(UiTree& tree, std::size_t node_index, gfx::Rect layout)
     return static_cast<float>(count_utf8_codepoints(text)) * approx_glyph_width;
 }
 
+struct TextEditLine {
+    std::size_t start = 0U;
+    std::size_t end = 0U;
+    float width = 0.0f;
+};
+
+[[nodiscard]] std::vector<TextEditLine> build_text_edit_lines(
+    std::string_view text,
+    gfx::Renderer* renderer
+)
+{
+    std::vector<TextEditLine> lines;
+    std::size_t line_start = 0U;
+    for(std::size_t i = 0U; i < text.size(); ++i) {
+        if(text[i] != '\n') {
+            continue;
+        }
+
+        const std::string_view line_text = text.substr(line_start, i - line_start);
+        lines.push_back(TextEditLine{
+            .start = line_start,
+            .end = i,
+            .width = measure_text_width(line_text, renderer)
+        });
+        line_start = i + 1U;
+    }
+
+    lines.push_back(TextEditLine{
+        .start = line_start,
+        .end = text.size(),
+        .width = measure_text_width(text.substr(line_start), renderer)
+    });
+    return lines;
+}
+
+[[nodiscard]] float max_text_edit_line_width(std::string_view text, gfx::Renderer* renderer)
+{
+    const std::vector<TextEditLine> lines = build_text_edit_lines(text, renderer);
+    float max_width = 0.0f;
+    for(const TextEditLine& line : lines) {
+        max_width = std::max(max_width, line.width);
+    }
+    return max_width;
+}
+
 [[nodiscard]] float intrinsic_width(const UiNode& child, float available_width, gfx::Renderer* renderer)
 {
     switch(child.kind) {
     case NodeKind::Button:
         return std::max(112.0f, measure_text_width(child.props.text, renderer) + 32.0f);
     case NodeKind::TextEdit:
-        return std::max(180.0f, measure_text_width(child.props.text, renderer) + 28.0f);
+        return std::max(180.0f, max_text_edit_line_width(child.props.text, renderer) + 28.0f);
     case NodeKind::Label:
         return std::max(24.0f, measure_text_width(child.props.text, renderer));
     case NodeKind::Panel:
@@ -209,7 +293,7 @@ void assign_layout(UiTree& tree, std::size_t node_index, gfx::Rect layout)
     case SizeMode::Auto:
         return clamp_height_to_constraints(
             child,
-            std::min(intrinsic_height(child.kind), available_height)
+            std::min(intrinsic_height(child), available_height)
         );
     }
 
@@ -227,6 +311,24 @@ void assign_layout(UiTree& tree, std::size_t node_index, gfx::Rect layout)
         --clamped;
     }
     return clamped;
+}
+
+[[nodiscard]] std::size_t text_edit_line_index_for_cursor(
+    const std::vector<TextEditLine>& lines,
+    std::size_t cursor
+) noexcept
+{
+    if(lines.empty()) {
+        return 0U;
+    }
+
+    for(std::size_t i = 0U; i < lines.size(); ++i) {
+        if(cursor >= lines[i].start && cursor <= lines[i].end) {
+            return i;
+        }
+    }
+
+    return lines.size() - 1U;
 }
 
 struct ComputedSize {
@@ -1005,6 +1107,8 @@ void emit_draw_commands(const UiTree& tree, std::size_t index, std::vector<DrawC
             .cursor_index = node->state.text_cursor,
             .caret_visible = node->state.caret_visible,
             .selection_anchor_index = node->state.text_selection_anchor,
+            .text_edit_input_type = node->props.text_edit_input_type,
+            .max_lines = node->props.text_edit_max_lines,
             .has_selection_background_color = node->props.has_selection_background_color,
             .selection_background_color = node->props.selection_background_color,
             .has_selection_text_color = node->props.has_selection_text_color,
@@ -1131,87 +1235,190 @@ void execute_draw_command(
         break;
     }
     case DrawCommandType::TextInput: {
-        const float padding_x = 12.0f;
-        const float padding_y = 8.0f;
         const gfx::Rect text_clip{
-            command.rect.x + padding_x,
-            command.rect.y + padding_y,
-            std::max(0.0f, command.rect.w - (2.0f * padding_x)),
-            std::max(0.0f, command.rect.h - (2.0f * padding_y))
+            command.rect.x + kTextEditPaddingX,
+            command.rect.y + kTextEditPaddingY,
+            std::max(0.0f, command.rect.w - (2.0f * kTextEditPaddingX)),
+            std::max(0.0f, command.rect.h - (2.0f * kTextEditPaddingY))
         };
 
         renderer.push_clip(text_clip);
 
-        const float baseline_y = command.rect.y + (command.rect.h * 0.62f);
         const std::size_t cursor_index = clamp_utf8_cursor(command.text, command.cursor_index);
         const std::size_t selection_anchor_index =
             clamp_utf8_cursor(command.text, command.selection_anchor_index);
         const std::size_t selection_begin = std::min(cursor_index, selection_anchor_index);
         const std::size_t selection_limit = std::max(cursor_index, selection_anchor_index);
-        const std::string text_before_cursor = command.text.substr(0U, cursor_index);
-
-        const float text_width = renderer.measure_text(command.text);
-        const float cursor_raw_x = renderer.measure_text(text_before_cursor);
-        const float max_scroll = std::max(0.0f, text_width - text_clip.w);
-        const float desired_scroll = std::max(0.0f, cursor_raw_x - std::max(0.0f, text_clip.w - 4.0f));
-        const float scroll_x = std::clamp(desired_scroll, 0.0f, max_scroll);
-
         const bool has_selection = command.focused && selection_begin != selection_limit;
-        float clipped_selection_x = text_clip.x;
-        float clipped_selection_w = 0.0f;
-        const float text_x = text_clip.x - scroll_x;
-        if(has_selection) {
-            const float before_selection_w =
-                renderer.measure_text(command.text.substr(0U, selection_begin));
-            const float selected_w = renderer.measure_text(
-                command.text.substr(selection_begin, selection_limit - selection_begin)
+
+        if(command.text_edit_input_type == TextEditInputType::MultiLine) {
+            const std::vector<TextEditLine> lines = build_text_edit_lines(command.text, &renderer);
+            const std::size_t visible_lines = std::min(
+                lines.size(),
+                visible_text_edit_lines(
+                    command.text_edit_input_type,
+                    command.max_lines,
+                    lines.size()
+                )
             );
-            const float selection_x = text_clip.x + before_selection_w - scroll_x;
-            const float selection_right = selection_x + selected_w;
-            const float clip_x0 = std::max(text_clip.x, selection_x);
-            const float clip_x1 = std::min(text_clip.x + text_clip.w, selection_right);
-            clipped_selection_x = clip_x0;
-            clipped_selection_w = std::max(0.0f, clip_x1 - clip_x0);
-            if(clipped_selection_w > 0.0f) {
+            const float line_top = command.rect.y + 16.0f;
+
+            for(std::size_t line_index = 0U; line_index < visible_lines; ++line_index) {
+                const TextEditLine& line = lines[line_index];
+                const std::string_view line_text(command.text.data() + line.start, line.end - line.start);
+                const float current_line_top =
+                    line_top + (static_cast<float>(line_index) * kTextEditLineHeight);
+                const float baseline_y = current_line_top + kTextEditLineBaselineOffset;
+
+                const std::size_t line_selection_begin = std::max(selection_begin, line.start);
+                const std::size_t line_selection_limit = std::min(selection_limit, line.end);
+                float clipped_selection_x = text_clip.x;
+                float clipped_selection_w = 0.0f;
+                if(has_selection && line_selection_begin < line_selection_limit) {
+                    const float before_selection_w = renderer.measure_text(
+                        line_text.substr(0U, line_selection_begin - line.start)
+                    );
+                    const float selected_w = renderer.measure_text(
+                        line_text.substr(
+                            line_selection_begin - line.start,
+                            line_selection_limit - line_selection_begin
+                        )
+                    );
+                    const float selection_x = text_clip.x + before_selection_w;
+                    const float selection_right = selection_x + selected_w;
+                    const float clip_x0 = std::max(text_clip.x, selection_x);
+                    const float clip_x1 = std::min(text_clip.x + text_clip.w, selection_right);
+                    clipped_selection_x = clip_x0;
+                    clipped_selection_w = std::max(0.0f, clip_x1 - clip_x0);
+                    if(clipped_selection_w > 0.0f) {
+                        renderer.fill_rect(
+                            gfx::Rect{
+                                clipped_selection_x,
+                                current_line_top + 2.0f,
+                                clipped_selection_w,
+                                std::max(0.0f, kTextEditLineHeight - 4.0f)
+                            },
+                            command.has_selection_background_color
+                                ? command.selection_background_color
+                                : gfx::Color{0.02f, 0.02f, 0.02f, 0.88f}
+                        );
+                    }
+                }
+
+                renderer.draw_text(text_clip.x, baseline_y, line_text, command.color);
+                if(has_selection && command.has_selection_text_color && clipped_selection_w > 0.0f) {
+                    renderer.push_clip(gfx::Rect{
+                        clipped_selection_x,
+                        current_line_top,
+                        clipped_selection_w,
+                        kTextEditLineHeight
+                    });
+                    renderer.draw_text(
+                        text_clip.x,
+                        baseline_y,
+                        line_text,
+                        command.selection_text_color
+                    );
+                    renderer.pop_clip();
+                }
+            }
+
+            if(command.focused && command.caret_visible && !lines.empty()) {
+                const std::size_t caret_line_index = text_edit_line_index_for_cursor(lines, cursor_index);
+                if(caret_line_index < visible_lines) {
+                    const TextEditLine& caret_line = lines[caret_line_index];
+                    const std::string_view caret_line_text(
+                        command.text.data() + caret_line.start,
+                        caret_line.end - caret_line.start
+                    );
+                    const std::size_t caret_local_index =
+                        std::min(cursor_index, caret_line.end) - caret_line.start;
+                    const float caret_x =
+                        text_clip.x + renderer.measure_text(caret_line_text.substr(0U, caret_local_index));
+                    const float caret_top = command.rect.y + 16.0f
+                        + (static_cast<float>(caret_line_index) * kTextEditLineHeight)
+                        + 2.0f;
+                    renderer.fill_rect(
+                        gfx::Rect{
+                            std::clamp(
+                                caret_x,
+                                text_clip.x,
+                                text_clip.x + std::max(0.0f, text_clip.w - 2.0f)
+                            ),
+                            caret_top,
+                            2.0f,
+                            std::max(0.0f, kTextEditLineHeight - 4.0f)
+                        },
+                        command.color
+                    );
+                }
+            }
+        } else {
+            const float baseline_y = command.rect.y + (command.rect.h * 0.62f);
+            const std::string text_before_cursor = command.text.substr(0U, cursor_index);
+            const float text_width = renderer.measure_text(command.text);
+            const float cursor_raw_x = renderer.measure_text(text_before_cursor);
+            const float max_scroll = std::max(0.0f, text_width - text_clip.w);
+            const float desired_scroll =
+                std::max(0.0f, cursor_raw_x - std::max(0.0f, text_clip.w - 4.0f));
+            const float scroll_x = std::clamp(desired_scroll, 0.0f, max_scroll);
+
+            float clipped_selection_x = text_clip.x;
+            float clipped_selection_w = 0.0f;
+            const float text_x = text_clip.x - scroll_x;
+            if(has_selection) {
+                const float before_selection_w =
+                    renderer.measure_text(command.text.substr(0U, selection_begin));
+                const float selected_w = renderer.measure_text(
+                    command.text.substr(selection_begin, selection_limit - selection_begin)
+                );
+                const float selection_x = text_clip.x + before_selection_w - scroll_x;
+                const float selection_right = selection_x + selected_w;
+                const float clip_x0 = std::max(text_clip.x, selection_x);
+                const float clip_x1 = std::min(text_clip.x + text_clip.w, selection_right);
+                clipped_selection_x = clip_x0;
+                clipped_selection_w = std::max(0.0f, clip_x1 - clip_x0);
+                if(clipped_selection_w > 0.0f) {
+                    renderer.fill_rect(
+                        gfx::Rect{
+                            clipped_selection_x,
+                            command.rect.y + 10.0f,
+                            clipped_selection_w,
+                            std::max(0.0f, command.rect.h - 20.0f)
+                        },
+                        command.has_selection_background_color
+                            ? command.selection_background_color
+                            : gfx::Color{0.02f, 0.02f, 0.02f, 0.88f}
+                    );
+                }
+            }
+            renderer.draw_text(text_x, baseline_y, command.text, command.color);
+            if(has_selection && command.has_selection_text_color && clipped_selection_w > 0.0f) {
+                renderer.push_clip(gfx::Rect{
+                    clipped_selection_x,
+                    text_clip.y,
+                    clipped_selection_w,
+                    text_clip.h
+                });
+                renderer.draw_text(text_x, baseline_y, command.text, command.selection_text_color);
+                renderer.pop_clip();
+            }
+
+            if(command.focused && command.caret_visible) {
+                float caret_x = text_clip.x + cursor_raw_x - scroll_x;
+                const float min_caret_x = text_clip.x;
+                const float max_caret_x = text_clip.x + std::max(0.0f, text_clip.w - 2.0f);
+                caret_x = std::clamp(caret_x, min_caret_x, max_caret_x);
                 renderer.fill_rect(
                     gfx::Rect{
-                        clipped_selection_x,
+                        caret_x,
                         command.rect.y + 10.0f,
-                        clipped_selection_w,
+                        2.0f,
                         std::max(0.0f, command.rect.h - 20.0f)
                     },
-                    command.has_selection_background_color
-                        ? command.selection_background_color
-                        : gfx::Color{0.02f, 0.02f, 0.02f, 0.88f}
+                    command.color
                 );
             }
-        }
-        renderer.draw_text(text_x, baseline_y, command.text, command.color);
-        if(has_selection && command.has_selection_text_color && clipped_selection_w > 0.0f) {
-            renderer.push_clip(gfx::Rect{
-                clipped_selection_x,
-                text_clip.y,
-                clipped_selection_w,
-                text_clip.h
-            });
-            renderer.draw_text(text_x, baseline_y, command.text, command.selection_text_color);
-            renderer.pop_clip();
-        }
-
-        if(command.focused && command.caret_visible) {
-            float caret_x = text_clip.x + cursor_raw_x - scroll_x;
-            const float min_caret_x = text_clip.x;
-            const float max_caret_x = text_clip.x + std::max(0.0f, text_clip.w - 2.0f);
-            caret_x = std::clamp(caret_x, min_caret_x, max_caret_x);
-            renderer.fill_rect(
-                gfx::Rect{
-                    caret_x,
-                    command.rect.y + 10.0f,
-                    2.0f,
-                    std::max(0.0f, command.rect.h - 20.0f)
-                },
-                command.color
-            );
         }
 
         renderer.pop_clip();

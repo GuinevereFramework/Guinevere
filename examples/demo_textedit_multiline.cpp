@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <iostream>
 #include <string>
 #include <string_view>
@@ -10,10 +11,13 @@ class TextEditorPanel {
 public:
     void render(guinevere::ui::ComponentScope& component) const
     {
-        const std::string& text_value_utf8 =
-            component.state().use<std::string>("text_value_utf8", std::string("Type UTF-8 text here"));
+        const std::string& text_value_utf8 = component.state().use<std::string>(
+            "text_value_utf8",
+            std::string("Type UTF-8 text here\nLine 2")
+        );
         const std::string& captured_utf8 =
             component.state().use<std::string>("captured_utf8", std::string{});
+        const std::size_t max_lines = component.state().use<std::size_t>("max_lines", 3U);
         const bool allow_ctrl_a = component.state().use<bool>("allow_ctrl_a", true);
         const bool allow_ctrl_c = component.state().use<bool>("allow_ctrl_c", true);
         const bool allow_ctrl_v = component.state().use<bool>("allow_ctrl_v", true);
@@ -26,8 +30,11 @@ public:
             component.state().use<bool>("custom_selection_background", false);
         const bool custom_selection_text =
             component.state().use<bool>("custom_selection_text", false);
+        const std::string max_lines_label = max_lines == 0U
+            ? std::string("Unlimited")
+            : std::to_string(max_lines);
         const std::string captured_label = captured_utf8.empty()
-            ? std::string("Press Enter or click Capture current text")
+            ? std::string("Click Capture current text to snapshot the editor contents")
             : std::string("Last captured: ") + captured_utf8;
         const std::string panel_key = component.auto_local_key("panel");
 
@@ -35,13 +42,13 @@ public:
         panel_entry.column(12.0f, 14.0f);
         panel_entry.align_stretch();
         panel_entry.justify_start();
-        panel_entry.min_height(220.0f);
+        panel_entry.min_height(260.0f);
 
-        component.label(panel_key, "SingleLine Text Input");
+        component.label(panel_key, "MultiLine Text Input");
 
         auto text_edit_entry = component.text_edit(panel_key, text_value_utf8);
-        text_edit_entry.input_type(guinevere::ui::TextEditInputType::SingleLine);
-        text_edit_entry.max_lines(1U);
+        text_edit_entry.input_type(guinevere::ui::TextEditInputType::MultiLine);
+        text_edit_entry.max_lines(max_lines);
         text_edit_entry.allow_caret_toggle();
         text_edit_entry.allow_ctrl_a(allow_ctrl_a);
         text_edit_entry.allow_ctrl_c(allow_ctrl_c);
@@ -64,6 +71,24 @@ public:
         });
         text_edit_entry.on_text_submit([component](const std::string& submitted_value_utf8) mutable {
             component.state().set<std::string>("captured_utf8", submitted_value_utf8);
+        });
+
+        auto cycle_max_lines_button = component.button(
+            panel_key,
+            std::string("maxLines: ") + max_lines_label
+        );
+        cycle_max_lines_button.on_click([component]() mutable {
+            component.state().update<std::size_t>("max_lines", [](std::size_t& value) {
+                if(value == 1U) {
+                    value = 3U;
+                    return;
+                }
+                if(value == 3U) {
+                    value = 0U;
+                    return;
+                }
+                value = 1U;
+            });
         });
 
         auto capture_button = component.button(panel_key, "Capture current text");
@@ -153,7 +178,10 @@ public:
         });
 
         component.label(panel_key, captured_label);
-        component.label(panel_key, "SingleLine: Enter captures text | Up/Down jump start/end");
+        component.label(
+            panel_key,
+            "MultiLine: Enter inserts newline | Up/Down move by line | maxLines applies here"
+        );
         component.label(
             panel_key,
             "Left/Right: move | Ctrl+A/C/V/X | Mouse drag: select | Insert: toggle caret"
@@ -172,7 +200,7 @@ int main()
     guinevere::app::RunConfig config;
     config.width = 900;
     config.height = 700;
-    config.title = "Guinevere TextEdit SingleLine Demo";
+    config.title = "Guinevere TextEdit MultiLine Demo";
     config.backend = guinevere::gfx::Backend::OpenGL;
 
     guinevere::app::Callbacks callbacks;
@@ -183,7 +211,7 @@ int main()
                               ) -> bool {
             const float footer_height = 34.0f;
             const std::string footer_text =
-                "SingleLine TextEdit demo with submit-on-Enter and configurable shortcuts. Breakpoint: "
+                "MultiLine TextEdit demo with maxLines and configurable shortcuts. Breakpoint: "
                 + std::string(guinevere::ui::app_breakpoint_label(scaffold.app_layout.breakpoint));
 
             const std::string header_key = app_component.auto_local_key("header");
@@ -193,7 +221,7 @@ int main()
             header_entry.layout(scaffold.header);
             header_entry.align_start();
             header_entry.justify_start();
-            (void)app_component.label(header_key, "Guinevere TextEdit SingleLine Demo");
+            (void)app_component.label(header_key, "Guinevere TextEdit MultiLine Demo");
 
             auto layout_root_entry = app_component.panel({}, layout_root_key);
             layout_root_entry.layout(scaffold.body);
@@ -232,7 +260,7 @@ int main()
                 .header_height = guinevere::ui::ResponsiveScalar{34.0f, 36.0f, 38.0f},
                 .header_gap = guinevere::ui::ResponsiveScalar{10.0f, 12.0f, 14.0f}
             },
-            "demo_textedit_singleline",
+            "demo_textedit_multiline",
             render_frame,
             guinevere::gfx::Color{0.08f, 0.10f, 0.13f, 1.0f}
         );

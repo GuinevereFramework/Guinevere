@@ -206,6 +206,224 @@ namespace {
     return text.size();
 }
 
+constexpr float kTextEditPaddingX = 12.0f;
+constexpr float kTextEditLineHeight = 24.0f;
+constexpr float kTextEditLineTopOffset = 16.0f;
+
+struct TextEditLine {
+    std::size_t start = 0U;
+    std::size_t end = 0U;
+    float width = 0.0f;
+};
+
+[[nodiscard]] bool text_edit_is_multiline(const UiNode& node) noexcept
+{
+    return node.props.text_edit_input_type == TextEditInputType::MultiLine;
+}
+
+[[nodiscard]] std::size_t count_text_edit_newlines(std::string_view text) noexcept
+{
+    std::size_t count = 0U;
+    for(const char ch : text) {
+        if(ch == '\n') {
+            ++count;
+        }
+    }
+    return count;
+}
+
+[[nodiscard]] std::size_t count_text_edit_lines(std::string_view text) noexcept
+{
+    return 1U + count_text_edit_newlines(text);
+}
+
+[[nodiscard]] std::vector<TextEditLine> build_text_edit_lines(
+    std::string_view text,
+    gfx::Renderer* renderer
+)
+{
+    std::vector<TextEditLine> lines;
+    std::size_t line_start = 0U;
+    for(std::size_t i = 0U; i < text.size(); ++i) {
+        if(text[i] != '\n') {
+            continue;
+        }
+
+        const std::string_view line_text = text.substr(line_start, i - line_start);
+        lines.push_back(TextEditLine{
+            .start = line_start,
+            .end = i,
+            .width = measure_text_width(line_text, renderer)
+        });
+        line_start = i + 1U;
+    }
+
+    lines.push_back(TextEditLine{
+        .start = line_start,
+        .end = text.size(),
+        .width = measure_text_width(text.substr(line_start), renderer)
+    });
+    return lines;
+}
+
+[[nodiscard]] std::size_t text_edit_line_index_for_cursor(
+    const std::vector<TextEditLine>& lines,
+    std::size_t cursor
+) noexcept
+{
+    if(lines.empty()) {
+        return 0U;
+    }
+
+    for(std::size_t i = 0U; i < lines.size(); ++i) {
+        if(cursor >= lines[i].start && cursor <= lines[i].end) {
+            return i;
+        }
+    }
+
+    return lines.size() - 1U;
+}
+
+[[nodiscard]] std::size_t move_text_edit_cursor_vertically(
+    std::string_view text,
+    std::size_t cursor,
+    int direction,
+    gfx::Renderer* renderer
+)
+{
+    const std::vector<TextEditLine> lines = build_text_edit_lines(text, renderer);
+    if(lines.empty()) {
+        return clamp_utf8_cursor(text, cursor);
+    }
+
+    const std::size_t clamped_cursor = clamp_utf8_cursor(text, cursor);
+    const std::size_t current_line_index = text_edit_line_index_for_cursor(lines, clamped_cursor);
+    if(direction < 0) {
+        if(current_line_index == 0U) {
+            return 0U;
+        }
+    } else if(current_line_index + 1U >= lines.size()) {
+        return text.size();
+    }
+
+    const TextEditLine& current_line = lines[current_line_index];
+    const std::string_view current_line_text(
+        text.data() + current_line.start,
+        current_line.end - current_line.start
+    );
+    const std::size_t current_line_cursor =
+        std::min(clamped_cursor, current_line.end) - current_line.start;
+    const float cursor_x = measure_text_width(
+        current_line_text.substr(0U, current_line_cursor),
+        renderer
+    );
+
+    const std::size_t target_line_index = direction < 0
+        ? current_line_index - 1U
+        : current_line_index + 1U;
+    const TextEditLine& target_line = lines[target_line_index];
+    const std::string_view target_line_text(
+        text.data() + target_line.start,
+        target_line.end - target_line.start
+    );
+    return target_line.start
+        + cursor_from_click_x(target_line_text, cursor_x, target_line.width, renderer);
+}
+
+[[nodiscard]] std::string sanitize_text_edit_insert(
+    std::string_view text,
+    TextEditInputType input_type,
+    std::size_t available_newlines
+)
+{
+    std::string out;
+    out.reserve(text.size());
+
+    bool previous_was_carriage_return = false;
+    for(const char ch : text) {
+        if(ch == '\r') {
+            if(input_type == TextEditInputType::SingleLine) {
+                out.push_back(' ');
+            } else if(available_newlines > 0U) {
+                out.push_back('\n');
+                --available_newlines;
+            }
+            previous_was_carriage_return = true;
+            continue;
+        }
+
+        if(ch == '\n') {
+            if(previous_was_carriage_return) {
+                previous_was_carriage_return = false;
+                continue;
+            }
+            if(input_type == TextEditInputType::SingleLine) {
+                out.push_back(' ');
+            } else if(available_newlines > 0U) {
+                out.push_back('\n');
+                --available_newlines;
+            }
+            continue;
+        }
+
+        previous_was_carriage_return = false;
+        out.push_back(ch);
+    }
+
+    return out;
+}
+
+[[nodiscard]] bool insert_text_edit_text(
+    const UiNode& node,
+    std::string& value_utf8,
+    std::size_t& cursor,
+    std::size_t& anchor,
+    std::string_view inserted_text
+)
+{
+    cursor = clamp_utf8_cursor(value_utf8, cursor);
+    anchor = clamp_utf8_cursor(value_utf8, anchor);
+
+    const std::size_t selection_begin = selection_start(cursor, anchor);
+    const std::size_t selection_limit = selection_end(cursor, anchor);
+
+    std::size_t available_newlines = 0U;
+    if(node.props.text_edit_input_type == TextEditInputType::MultiLine) {
+        if(node.props.text_edit_max_lines == 0U) {
+            available_newlines = static_cast<std::size_t>(-1);
+        } else {
+            const std::size_t current_line_count = count_text_edit_lines(value_utf8);
+            const std::size_t selected_newline_count = count_text_edit_newlines(
+                std::string_view(value_utf8).substr(
+                    selection_begin,
+                    selection_limit - selection_begin
+                )
+            );
+            const std::size_t base_line_count =
+                std::max<std::size_t>(1U, current_line_count - selected_newline_count);
+            if(node.props.text_edit_max_lines > base_line_count) {
+                available_newlines = node.props.text_edit_max_lines - base_line_count;
+            }
+        }
+    }
+
+    const std::string sanitized = sanitize_text_edit_insert(
+        inserted_text,
+        node.props.text_edit_input_type,
+        available_newlines
+    );
+    if(sanitized.empty()) {
+        return false;
+    }
+
+    value_utf8.erase(selection_begin, selection_limit - selection_begin);
+    value_utf8.insert(selection_begin, sanitized);
+    cursor = selection_begin + sanitized.size();
+    cursor = clamp_utf8_cursor(value_utf8, cursor);
+    anchor = cursor;
+    return true;
+}
+
 [[nodiscard]] std::size_t text_edit_cursor_from_mouse(
     const UiNode& node,
     std::string_view value_utf8,
@@ -213,11 +431,42 @@ namespace {
     gfx::Renderer* renderer
 )
 {
-    constexpr float padding_x = 12.0f;
-    const float clip_x = node.layout.x + padding_x;
-    const float clip_w = std::max(0.0f, node.layout.w - (2.0f * padding_x));
+    const float clip_x = node.layout.x + kTextEditPaddingX;
+    const float clip_w = std::max(0.0f, node.layout.w - (2.0f * kTextEditPaddingX));
     if(clip_w <= 0.0f) {
         return clamp_utf8_cursor(value_utf8, node.state.text_cursor);
+    }
+
+    if(text_edit_is_multiline(node)) {
+        const std::vector<TextEditLine> lines = build_text_edit_lines(value_utf8, renderer);
+        if(lines.empty()) {
+            return clamp_utf8_cursor(value_utf8, node.state.text_cursor);
+        }
+
+        std::size_t visible_lines = lines.size();
+        if(node.props.text_edit_max_lines > 0U) {
+            visible_lines = std::min(visible_lines, node.props.text_edit_max_lines);
+        }
+        visible_lines = std::max<std::size_t>(1U, visible_lines);
+
+        const float local_y = input.y - (node.layout.y + kTextEditLineTopOffset);
+        const float max_local_y = std::max(
+            0.0f,
+            (static_cast<float>(visible_lines) * kTextEditLineHeight) - 0.001f
+        );
+        const float clamped_local_y = std::clamp(local_y, 0.0f, max_local_y);
+        const std::size_t line_index = std::min<std::size_t>(
+            visible_lines - 1U,
+            static_cast<std::size_t>(clamped_local_y / kTextEditLineHeight)
+        );
+        const TextEditLine& line = lines[line_index];
+        const std::string_view line_text(value_utf8.data() + line.start, line.end - line.start);
+        const float local_x = std::clamp(
+            input.x - clip_x,
+            0.0f,
+            std::max(0.0f, line.width)
+        );
+        return line.start + cursor_from_click_x(line_text, local_x, line.width, renderer);
     }
 
     const std::size_t cursor_index = clamp_utf8_cursor(value_utf8, node.state.text_cursor);
@@ -480,16 +729,15 @@ bool InteractionState::update_text_edit(
 
         if(node.props.allow_ctrl_v && input_.ctrl_v_presses > 0U && !clipboard_utf8_.empty()) {
             for(unsigned int i = 0U; i < input_.ctrl_v_presses; ++i) {
-                (void)erase_selected_text(
-                    value_utf8,
-                    node.state.text_cursor,
-                    node.state.text_selection_anchor
-                );
-                value_utf8.insert(node.state.text_cursor, clipboard_utf8_);
-                node.state.text_cursor += clipboard_utf8_.size();
-                node.state.text_cursor = clamp_utf8_cursor(value_utf8, node.state.text_cursor);
-                node.state.text_selection_anchor = node.state.text_cursor;
-                changed = true;
+                if(insert_text_edit_text(
+                       node,
+                       value_utf8,
+                       node.state.text_cursor,
+                       node.state.text_selection_anchor,
+                       clipboard_utf8_
+                   )) {
+                    changed = true;
+                }
             }
         }
 
@@ -523,13 +771,49 @@ bool InteractionState::update_text_edit(
         }
 
         if(node.props.allow_arrow_up && input_.up_arrow_presses > 0U) {
-            node.state.text_cursor = 0U;
-            node.state.text_selection_anchor = node.state.text_cursor;
+            for(unsigned int i = 0U; i < input_.up_arrow_presses; ++i) {
+                if(text_edit_is_multiline(node)) {
+                    if(has_selection(node.state.text_cursor, node.state.text_selection_anchor)) {
+                        node.state.text_cursor = selection_start(
+                            node.state.text_cursor,
+                            node.state.text_selection_anchor
+                        );
+                    } else {
+                        node.state.text_cursor = move_text_edit_cursor_vertically(
+                            value_utf8,
+                            node.state.text_cursor,
+                            -1,
+                            renderer
+                        );
+                    }
+                } else {
+                    node.state.text_cursor = 0U;
+                }
+                node.state.text_selection_anchor = node.state.text_cursor;
+            }
         }
 
         if(node.props.allow_arrow_down && input_.down_arrow_presses > 0U) {
-            node.state.text_cursor = value_utf8.size();
-            node.state.text_selection_anchor = node.state.text_cursor;
+            for(unsigned int i = 0U; i < input_.down_arrow_presses; ++i) {
+                if(text_edit_is_multiline(node)) {
+                    if(has_selection(node.state.text_cursor, node.state.text_selection_anchor)) {
+                        node.state.text_cursor = selection_end(
+                            node.state.text_cursor,
+                            node.state.text_selection_anchor
+                        );
+                    } else {
+                        node.state.text_cursor = move_text_edit_cursor_vertically(
+                            value_utf8,
+                            node.state.text_cursor,
+                            1,
+                            renderer
+                        );
+                    }
+                } else {
+                    node.state.text_cursor = value_utf8.size();
+                }
+                node.state.text_selection_anchor = node.state.text_cursor;
+            }
         }
 
         node.state.text_cursor = clamp_utf8_cursor(value_utf8, node.state.text_cursor);
@@ -554,20 +838,32 @@ bool InteractionState::update_text_edit(
         }
 
         if(!input_.text_utf8.empty()) {
-            (void)erase_selected_text(
-                value_utf8,
-                node.state.text_cursor,
-                node.state.text_selection_anchor
-            );
-            value_utf8.insert(node.state.text_cursor, input_.text_utf8);
-            node.state.text_cursor += input_.text_utf8.size();
-            node.state.text_cursor = clamp_utf8_cursor(value_utf8, node.state.text_cursor);
-            node.state.text_selection_anchor = node.state.text_cursor;
-            changed = true;
+            if(insert_text_edit_text(
+                   node,
+                   value_utf8,
+                   node.state.text_cursor,
+                   node.state.text_selection_anchor,
+                   input_.text_utf8
+               )) {
+                changed = true;
+            }
         }
 
-        if(input_.enter_presses > 0U && submitted != nullptr) {
-            *submitted = true;
+        if(input_.enter_presses > 0U) {
+            if(text_edit_is_multiline(node)) {
+                const std::string newline_insert(input_.enter_presses, '\n');
+                if(insert_text_edit_text(
+                       node,
+                       value_utf8,
+                       node.state.text_cursor,
+                       node.state.text_selection_anchor,
+                       newline_insert
+                   )) {
+                    changed = true;
+                }
+            } else if(submitted != nullptr) {
+                *submitted = true;
+            }
         }
     }
 
@@ -580,6 +876,10 @@ bool InteractionState::update_text_edit(
     }
     if(previous_text != node.props.text) {
         node.dirty_flags |= DirtyFlags::Resource;
+        if(node.layout_config.width_mode == SizeMode::Auto
+            || node.layout_config.height_mode == SizeMode::Auto) {
+            node.dirty_flags |= DirtyFlags::Layout;
+        }
     }
 
     return changed;
