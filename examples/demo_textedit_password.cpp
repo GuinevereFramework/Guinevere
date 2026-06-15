@@ -89,7 +89,7 @@ public:
             : std::string("Last submitted length: ") + std::to_string(submitted_length) + " chars";
         const std::string panel_key = component.auto_local_key("panel");
 
-        auto panel_entry = component.panel({}, panel_key);
+        auto panel_entry = component.panel(guinevere::ui::NodeConfig{}, panel_key);
         panel_entry.column(12.0f, 14.0f);
         panel_entry.align_stretch();
         panel_entry.justify_start();
@@ -298,7 +298,7 @@ int main()
             header_entry.justify_start();
             (void)app_component.label(header_key, "Guinevere TextEdit Password Demo");
 
-            auto layout_root_entry = app_component.panel({}, layout_root_key);
+            auto layout_root_entry = app_component.panel(guinevere::ui::NodeConfig{}, layout_root_key);
             layout_root_entry.layout(scaffold.body);
             layout_root_entry.column(14.0f, 16.0f);
             layout_root_entry.main_axis_tracks({

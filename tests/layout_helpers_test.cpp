@@ -212,6 +212,48 @@ int main()
     }
 
     {
+        std::vector<ReconciledNode> declarative_frame;
+        FrameBuilder declarative_builder(declarative_frame);
+        const guinevere::gfx::Rect panel_layout{4.0f, 8.0f, 300.0f, 120.0f};
+        (void)declarative_builder.panel(
+            "root",
+            "declarative_panel",
+            guinevere::ui::NodeConfig{
+                .layout = panel_layout,
+                .direction = guinevere::ui::LayoutDirection::Column,
+                .gap = {10.0f, 14.0f},
+                .align = guinevere::ui::Alignment::Center,
+                .justify = guinevere::ui::Justify::Start,
+                .min_width = 220.0f,
+                .main_axis_tracks = {
+                    Flex(0.0f).min(80.0f).pref(100.0f).priority(1),
+                    Flex(1.0f).min(120.0f).pref(160.0f).priority(2)
+                }
+            }
+        );
+        if(declarative_frame.empty()) {
+            return 1;
+        }
+
+        const auto& declarative_node = declarative_frame.front().node;
+        if(!declarative_node.layout_hint.has_value()
+            || !rect_eq(*declarative_node.layout_hint, 4.0f, 8.0f, 300.0f, 120.0f)) {
+            return 1;
+        }
+
+        const auto& declarative_layout = declarative_node.layout_config;
+        if(declarative_layout.direction != guinevere::ui::LayoutDirection::Column
+            || !approx(declarative_layout.gap, 10.0f)
+            || !approx(declarative_layout.padding, 14.0f)
+            || declarative_layout.align_items != guinevere::ui::Alignment::Center
+            || declarative_layout.justify_content != guinevere::ui::Justify::Start
+            || !approx(declarative_layout.min_width, 220.0f)
+            || declarative_layout.main_axis_tracks.size() != 2U) {
+            return 1;
+        }
+    }
+
+    {
         std::vector<ReconciledNode> text_edit_frame;
         FrameBuilder text_edit_builder(text_edit_frame);
 
@@ -603,7 +645,7 @@ int main()
             "demo_component"
         );
         try {
-            (void)component_scope.panel({}, "bad.key");
+            (void)component_scope.panel(guinevere::ui::NodeConfig{}, "bad.key");
         } catch(const std::invalid_argument&) {
             invalid_component_key_rejected = true;
         }
@@ -622,7 +664,7 @@ int main()
             "root",
             "demo_component"
         );
-        (void)component_scope.panel({}, "layout_root");
+        (void)component_scope.panel(guinevere::ui::NodeConfig{}, "layout_root");
 
         struct CounterComponent {
             void render(guinevere::ui::ComponentScope& component) const
@@ -682,7 +724,7 @@ int main()
         }
 
         const std::string layout_root_key = component_scope.auto_local_key("layout_root");
-        (void)component_scope.panel({}, layout_root_key);
+        (void)component_scope.panel(guinevere::ui::NodeConfig{}, layout_root_key);
 
         const auto counter_component_location = std::source_location::current();
         const std::string counter_component_key = component_scope.auto_local_key(
@@ -780,7 +822,7 @@ int main()
             );
 
             constexpr std::string_view container_key = "container";
-            (void)component_scope.panel({}, std::string(container_key));
+            (void)component_scope.panel(guinevere::ui::NodeConfig{}, std::string(container_key));
             (void)component_scope.label(std::string(container_key), "Auto Label");
             (void)component_scope.button(std::string(container_key), "Auto Button");
             (void)component_scope.text_edit(std::string(container_key), "Auto TextEdit");

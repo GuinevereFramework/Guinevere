@@ -66,6 +66,9 @@ enum class JustifyContent {
     SpaceBetween,
 };
 
+using Alignment = AlignItems;
+using Justify = JustifyContent;
+
 enum class OverflowPolicy {
     Clip,
     Visible,
@@ -180,6 +183,34 @@ struct LayoutConfig {
     std::vector<AxisTrackConstraint> main_axis_tracks{};
     std::vector<AxisTrackConstraint> grid_columns{};
     std::vector<AxisTrackConstraint> grid_rows{};
+    std::size_t grid_auto_columns = 1U;
+};
+
+struct LayoutGap {
+    float item = 6.0f;
+    float padding = 8.0f;
+};
+
+struct NodeConfig {
+    std::optional<gfx::Rect> layout = std::nullopt;
+    LayoutDirection direction = LayoutDirection::None;
+    LayoutGap gap{};
+    Alignment align = Alignment::Start;
+    Justify justify = Justify::Start;
+    OverflowPolicy overflow = OverflowPolicy::Clip;
+    SizeMode width_mode = SizeMode::Auto;
+    SizeMode height_mode = SizeMode::Auto;
+    float width_fill_weight = 1.0f;
+    float height_fill_weight = 1.0f;
+    float min_width = 0.0f;
+    float max_width = 0.0f;
+    float min_height = 0.0f;
+    float max_height = 0.0f;
+    float fixed_width = 0.0f;
+    float fixed_height = 0.0f;
+    std::vector<LayoutConfig::AxisTrackConstraint> main_axis_tracks{};
+    std::vector<LayoutConfig::AxisTrackConstraint> grid_columns{};
+    std::vector<LayoutConfig::AxisTrackConstraint> grid_rows{};
     std::size_t grid_auto_columns = 1U;
 };
 

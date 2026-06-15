@@ -183,6 +183,50 @@ public:
             node().node.layout_hint = rect;
         }
 
+        void configure(const NodeConfig& config)
+        {
+            if(config.layout.has_value()) {
+                layout(*config.layout);
+            }
+
+            LayoutConfig& layout_config = node().node.layout_config;
+            layout_config.direction = config.direction;
+            layout_config.gap = config.gap.item;
+            layout_config.padding = config.gap.padding;
+            layout_config.align_items = config.align;
+            layout_config.justify_content = config.justify;
+            layout_config.overflow = config.overflow;
+            layout_config.width_mode = config.width_mode;
+            layout_config.height_mode = config.height_mode;
+            layout_config.width_fill_weight = config.width_fill_weight;
+            layout_config.height_fill_weight = config.height_fill_weight;
+            layout_config.min_width = config.min_width;
+            layout_config.max_width = config.max_width;
+            layout_config.min_height = config.min_height;
+            layout_config.max_height = config.max_height;
+            layout_config.fixed_width = config.fixed_width;
+            layout_config.fixed_height = config.fixed_height;
+            layout_config.main_axis_tracks = config.main_axis_tracks;
+            layout_config.grid_columns = config.grid_columns;
+            layout_config.grid_rows = config.grid_rows;
+            layout_config.grid_auto_columns = config.grid_auto_columns > 0U
+                ? config.grid_auto_columns
+                : 1U;
+
+            if(!layout_config.grid_columns.empty()) {
+                layout_config.grid_auto_columns = layout_config.grid_columns.size();
+            }
+
+            if(layout_config.direction != LayoutDirection::Grid) {
+                layout_config.grid_columns.clear();
+                layout_config.grid_rows.clear();
+                layout_config.grid_auto_columns = 1U;
+            }
+            if(layout_config.direction == LayoutDirection::Grid) {
+                layout_config.main_axis_tracks.clear();
+            }
+        }
+
         void column(float gap = 6.0f, float padding = 8.0f)
         {
             node().node.layout_config.direction = LayoutDirection::Column;
@@ -546,14 +590,31 @@ public:
         return Entry(&nodes_, nodes_.size() - 1U, &app_breakpoint_);
     }
 
+    Entry add(std::string parent_key, std::string key, NodeKind kind, const NodeConfig& config)
+    {
+        Entry entry = add(std::move(parent_key), std::move(key), kind);
+        entry.configure(config);
+        return entry;
+    }
+
     Entry panel(std::string parent_key, std::string key)
     {
         return add(std::move(parent_key), std::move(key), NodeKind::Panel);
     }
 
+    Entry panel(std::string parent_key, std::string key, const NodeConfig& config)
+    {
+        return add(std::move(parent_key), std::move(key), NodeKind::Panel, config);
+    }
+
     Entry view(std::string parent_key, std::string key)
     {
         return add(std::move(parent_key), std::move(key), NodeKind::View);
+    }
+
+    Entry view(std::string parent_key, std::string key, const NodeConfig& config)
+    {
+        return add(std::move(parent_key), std::move(key), NodeKind::View, config);
     }
 
     Entry column(std::string parent_key, std::string key, float gap = 6.0f, float padding = 8.0f)

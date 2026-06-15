@@ -17,11 +17,16 @@ public:
         const int click_count = component.state().use<int>("click_count", 0);
         const std::string panel_key = component.auto_local_key("panel");
 
-        auto panel_entry = component.panel({}, panel_key);
-        panel_entry.column(10.0f, 14.0f);
-        panel_entry.align_center();
-        panel_entry.justify_start();
-        panel_entry.min_width(220.0f);
+        (void)component.panel(
+            guinevere::ui::NodeConfig{
+                .direction = guinevere::ui::LayoutDirection::Column,
+                .gap = {10.0f, 14.0f},
+                .align = guinevere::ui::Alignment::Center,
+                .justify = guinevere::ui::Justify::Start,
+                .min_width = 220.0f
+            },
+            panel_key
+        );
         component.label(panel_key, title_);
 
         auto increase_button_entry = component.button(panel_key, "Increase");
@@ -47,10 +52,15 @@ void render_hint_component(guinevere::ui::ComponentScope& component)
     const bool expanded = component.state().use<bool>("expanded", false);
     const std::string panel_key = component.auto_local_key("panel");
 
-    auto panel_entry = component.panel({}, panel_key);
-    panel_entry.column(10.0f, 12.0f);
-    panel_entry.align_stretch();
-    panel_entry.justify_start();
+    (void)component.panel(
+        guinevere::ui::NodeConfig{
+            .direction = guinevere::ui::LayoutDirection::Column,
+            .gap = {10.0f, 12.0f},
+            .align = guinevere::ui::Alignment::Stretch,
+            .justify = guinevere::ui::Justify::Start
+        },
+        panel_key
+    );
 
     auto toggle_button_entry =
         component.button(panel_key, expanded ? "Hide component tips" : "Show component tips");
@@ -106,35 +116,65 @@ int main()
             const std::string counter_row_key = app_component.auto_local_key("counter_row");
             const std::string detail_column_key = app_component.auto_local_key("detail_column");
 
-            auto header_entry = app_component.column({}, header_key, 0.0f, 0.0f);
-            header_entry.layout(scaffold.header);
-            header_entry.align_start();
-            header_entry.justify_start();
+            (void)app_component.view(
+                guinevere::ui::NodeConfig{
+                    .layout = scaffold.header,
+                    .direction = guinevere::ui::LayoutDirection::Column,
+                    .gap = {0.0f, 0.0f},
+                    .align = guinevere::ui::Alignment::Start,
+                    .justify = guinevere::ui::Justify::Start
+                },
+                header_key
+            );
             (void)app_component.label(header_key, "Guinevere DRM Component Demo");
 
-            auto layout_root_entry = app_component.panel({}, layout_root_key);
-            layout_root_entry.layout(scaffold.body);
-            layout_root_entry.column(row_gap, 18.0f);
-            layout_root_entry.main_axis_tracks({
-                guinevere::ui::Flex(0.0f).min(156.0f).pref(preferred_counter_row_height).priority(1),
-                guinevere::ui::Flex(1.0f).min(min_detail_height).pref(min_detail_height).priority(2),
-                guinevere::ui::Fixed(footer_height).priority(3)
-            });
-            layout_root_entry.align_stretch();
-            layout_root_entry.justify_start();
+            (void)app_component.panel(
+                guinevere::ui::NodeConfig{
+                    .layout = scaffold.body,
+                    .direction = guinevere::ui::LayoutDirection::Column,
+                    .gap = {row_gap, 18.0f},
+                    .align = guinevere::ui::Alignment::Stretch,
+                    .justify = guinevere::ui::Justify::Start,
+                    .main_axis_tracks = {
+                        guinevere::ui::Flex(0.0f)
+                            .min(156.0f)
+                            .pref(preferred_counter_row_height)
+                            .priority(1),
+                        guinevere::ui::Flex(1.0f)
+                            .min(min_detail_height)
+                            .pref(min_detail_height)
+                            .priority(2),
+                        guinevere::ui::Fixed(footer_height).priority(3)
+                    }
+                },
+                layout_root_key
+            );
 
-            auto counter_row_entry = app_component.row(layout_root_key, counter_row_key, row_gap, 0.0f);
-            counter_row_entry.align_stretch();
-            counter_row_entry.justify_start();
-            counter_row_entry.main_axis_tracks({
-                guinevere::ui::Flex(1.0f).min(220.0f).pref(280.0f),
-                guinevere::ui::Flex(1.0f).min(220.0f).pref(280.0f)
-            });
+            (void)app_component.view(
+                guinevere::ui::NodeConfig{
+                    .direction = guinevere::ui::LayoutDirection::Row,
+                    .gap = {row_gap, 0.0f},
+                    .align = guinevere::ui::Alignment::Stretch,
+                    .justify = guinevere::ui::Justify::Start,
+                    .main_axis_tracks = {
+                        guinevere::ui::Flex(1.0f).min(220.0f).pref(280.0f),
+                        guinevere::ui::Flex(1.0f).min(220.0f).pref(280.0f)
+                    }
+                },
+                counter_row_key,
+                layout_root_key
+            );
 
-            auto detail_column_entry =
-                app_component.column(layout_root_key, detail_column_key, 12.0f, 0.0f);
-            detail_column_entry.align_stretch();
-            detail_column_entry.justify_start();
+            (void)app_component.view(
+                guinevere::ui::NodeConfig{
+                    .direction = guinevere::ui::LayoutDirection::Column,
+                    .gap = {12.0f, 0.0f},
+                    .align = guinevere::ui::Alignment::Stretch,
+                    .justify = guinevere::ui::Justify::Start
+                },
+                detail_column_key,
+                layout_root_key
+            );
 
             app_component.mount_component(
                 app_component.auto_local_key("counter"),

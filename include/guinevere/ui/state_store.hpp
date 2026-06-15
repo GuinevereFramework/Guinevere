@@ -692,6 +692,21 @@ public:
         );
     }
 
+    FrameBuilder::Entry add(
+        std::string local_parent_key,
+        std::string local_key,
+        NodeKind kind,
+        const NodeConfig& config
+    )
+    {
+        return frame_builder_->add(
+            parent_key(local_parent_key),
+            node_key(local_key),
+            kind,
+            config
+        );
+    }
+
     FrameBuilder::Entry add(std::string local_key, NodeKind kind)
     {
         return add({}, std::move(local_key), kind);
@@ -703,6 +718,28 @@ public:
             parent_key(local_parent_key),
             node_key(local_key)
         );
+    }
+
+    FrameBuilder::Entry panel(
+        const NodeConfig& config,
+        std::string local_key,
+        std::string local_parent_key = {}
+    )
+    {
+        return frame_builder_->panel(
+            parent_key(local_parent_key),
+            node_key(local_key),
+            config
+        );
+    }
+
+    FrameBuilder::Entry panel(
+        std::string local_parent_key,
+        std::string local_key,
+        const NodeConfig& config
+    )
+    {
+        return panel(config, std::move(local_key), std::move(local_parent_key));
     }
 
     FrameBuilder::Entry panel(
@@ -720,13 +757,13 @@ public:
         const std::source_location& location = std::source_location::current()
     )
     {
-        return panel({}, location);
+        return panel(std::string{}, location);
     }
 
     template<detail::LocalKeyType LocalKey>
     FrameBuilder::Entry panel()
     {
-        return panel({}, std::string(LocalKey::value));
+        return panel(std::string{}, std::string(LocalKey::value));
     }
 
     FrameBuilder::Entry view(std::string local_parent_key, std::string local_key)
@@ -735,6 +772,28 @@ public:
             parent_key(local_parent_key),
             node_key(local_key)
         );
+    }
+
+    FrameBuilder::Entry view(
+        const NodeConfig& config,
+        std::string local_key,
+        std::string local_parent_key = {}
+    )
+    {
+        return frame_builder_->view(
+            parent_key(local_parent_key),
+            node_key(local_key),
+            config
+        );
+    }
+
+    FrameBuilder::Entry view(
+        std::string local_parent_key,
+        std::string local_key,
+        const NodeConfig& config
+    )
+    {
+        return view(config, std::move(local_key), std::move(local_parent_key));
     }
 
     FrameBuilder::Entry view(
@@ -752,13 +811,13 @@ public:
         const std::source_location& location = std::source_location::current()
     )
     {
-        return view({}, location);
+        return view(std::string{}, location);
     }
 
     template<detail::LocalKeyType LocalKey>
     FrameBuilder::Entry view()
     {
-        return view({}, std::string(LocalKey::value));
+        return view(std::string{}, std::string(LocalKey::value));
     }
 
     FrameBuilder::Entry column(

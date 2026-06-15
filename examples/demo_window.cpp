@@ -80,7 +80,7 @@ int main()
             (void)component.label(header_key, "Guinevere Demo Window");
             (void)component.label(header_key, subtitle_text);
 
-            auto body_root_entry = component.panel({}, body_root_key);
+            auto body_root_entry = component.panel(guinevere::ui::NodeConfig{}, body_root_key);
             body_root_entry.layout(scaffold.body);
             body_root_entry.column(0.0f, 0.0f);
             body_root_entry.align_stretch();
